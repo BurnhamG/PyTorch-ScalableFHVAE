@@ -75,9 +75,9 @@ class SimpleFHVAE(nn.Module):
 
     def net(self, xin, xout, y, nmu2, z1_hus, z1_dim, z2_hus, z2_dim, x_hus):
         """Initialize the network"""
-        mu2_table, mu2 = nu2_lookup(y, z2_dim, nmu2)
+        self.mu2_table, self.mu2 = mu2_lookup(self.y, z2_dim, self.nmu2)
 
-        z2_pre_out = z2_pre_encoder(xin, z2_hus)
+        z2_pre_out = z2_pre_encoder(self.xin, z2_hus)
         z2_mu, z2_logvar, z2_sample = gauss_layer(z2_preout, z2_dim)
         qz2_x = [z1_mu, z1_logvar]
 
@@ -91,6 +91,7 @@ class SimpleFHVAE(nn.Module):
         x_mu = torch.reshape(x_mu, (-1, T, F))
         x_logvar = torch.reshape(x_logvar, (-1, T, F))
         x_sample = torch.reshape(x_sample, (-1, T, F))
+        # p(x|z_1, z_2)
         px_z = [x_mu, x_logvar]
 
         return mu2_table, mu2, qz2_x, z2_sample, qz1_x, z1_sample, px_z, x_sample
@@ -137,6 +138,9 @@ class SimpleFHVAE(nn.Module):
             msg += "\n    %s, %s" % (param.name, param.size())
         return msg
 
+    def forward(self, x):
+        pass
+
 
 def mu2_lookup(y, z2_dim, nmu2, init_std=1.0):
     """
@@ -155,7 +159,7 @@ def mu2_lookup(y, z2_dim, nmu2, init_std=1.0):
 
 def z1_pre_encoder(x, z2, hus=[1024, 1024]):
     """
-    Pre-stochastic layer encdoder for z1 (latent segment variable)
+    Pre-stochastic layer encoder for z1 (latent segment variable)
     Args:
         x(torch.Tensor): tensor of shape (bs, T, F)
         z2(torch.Tensor): tensor of shape (bs, D1)
@@ -167,4 +171,74 @@ def z1_pre_encoder(x, z2, hus=[1024, 1024]):
     x = torch.reshape(x, (-1, T * F))
     out = torch.cat([x, z2], dim=-1)
     for i, hu in enumerate(hus):
-        pass
+        out = nn.Linear(np.prod(out.shape[1:]), hu)(out)
+        out = F.relu(out)
+    return out
+
+
+def z2_pre_encoder(x, hus=[1024, 1024]):
+    """
+    Pre-stochastic layer encoder for z2 (latent sequence variable)
+    Args:
+        x(torch.Tensor): tensor of shape (bs, T,F)
+        hus(list): list of numbers of LSTM layer hidden units
+    Return:
+        out(torch.Tensor): concatenation of hidden states of all LSTM layers
+    """
+    T, F = list(x.size())[1:]
+    out = torch.reshape(x, (-1, T * F))
+    for i, hu in enumerate(hus):
+        out = nn.Linear(np.prod(out.shape[1:]), hu)(out)
+        out = F.relu(out)
+    return out
+
+
+def gauss_layer(inp, dim):
+    """
+    Gaussian layer
+    Args:
+        inp(torch.Tensor): input to Gaussian layer
+        dim(int): dimension of output latent variables
+    """
+    mu = nn.Linear(np.prod(inp.shape[1:]), dim)(inp)
+    logvar = nn.Linear(np.prod(inp.shape[1:]), dim)(inp)
+    std = torch.exp(0.5 * logvar)
+    eps = torch.randn_like(std)
+    return mu, logvar, mu + eps * std
+
+
+def pre_decoder(z1, z2, hus=[1024, 1024]):
+    """
+    Pre-stochastic layer decoder
+    Args:
+        z1(torch.Tensor)
+        z2(torch.Tensor)
+        x(torch.Tensor): tensor of shape (bs, T, F). Only shape is used
+        hus(list)
+    """
+    out = torch.cat([z1, z2], dim=-1)
+    for i, hu in enumerate(hus):
+        out = nn.Linear(np.prod(out.shape[1:]), hu)(out)
+        out = F.relu(out)
+    return out
+
+
+def log_gauss(x, mu=0.0, logvar=0.0):
+    """
+    Compute log N(x; mu, exp(logvar))
+    """
+    return -0.5 * (
+        np.log(2 * np.pi) + logvar + torch.pow(x - mu, 2) / torch.exp(logvar)
+    )
+
+
+def kld(p_mu, p_logvar, q_mu, q_logvar):
+    """
+    Compute D_KL(p || q) of two Gaussians
+    """
+    return -0.5 * (
+        1
+        + p_logvar
+        - q_logvar
+        - (torch.pow(p_mu - q_mu, 2) + torch.exp(p_logvar)) / torch.exp(q_logvar)
+    )
