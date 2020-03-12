@@ -195,7 +195,7 @@ class PreDecoder(nn.Module):
 
 
 # alpha/discriminative weight of 10 was found to produce best results
-def loss_function(model, target, num_segs, alpha=10.0):
+def calculate_lower_bound(mu2, pmu2, qz2_x, pz2, qz1_x, pz1, num_segs, alpha=10.0):
     """
     Discriminative segment variational lower bound
     Segment variational lower bound plus the (weighted) discriminative objective
@@ -203,25 +203,24 @@ def loss_function(model, target, num_segs, alpha=10.0):
     loss = nn.CrossEntropyLoss()
 
     # variational lower bound
-    self.log_pmu2 = torch.sum(log_gauss(self.mu2, self.pmu2[0], self.pmu2[1]), dim=1)
-    self.neg_kld_z2 = -1 * torch.sum(
-        kld(self.qz2_x[0], self.qz2_x[1], self.pz2[0], self.pz2[1]), dim=1
-    )
-    self.neg_kld_z1 = -1 * torch.sum(
-        kld(self.qz1_x[0], self.qz1_x[1], self.pz1[0], self.pz1[1]), dim=1
-    )
-    self.log_px_z = torch.sum(log_gauss(xout, self.px_z[0], self.px_z[1]), dim=(1, 2))
-    lower_bound = (
-        self.log_px_z + self.neg_kld_z1 + self.neg_kld_z2 + self.log_pmu2 / num_segs
-    )
+    log_pmu2 = torch.sum(log_gauss(mu2, pmu2[0], pmu2[1]), dim=1)
+    neg_kld_z2 = -1 * torch.sum(kld(qz2_x[0], qz2_x[1], pz2[0], pz2[1]), dim=1)
+    neg_kld_z1 = -1 * torch.sum(kld(qz1_x[0], qz1_x[1], pz1[0], pz1[1]), dim=1)
+    log_px_z = torch.sum(log_gauss(xout, px_z[0], px_z[1]), dim=(1, 2))
+    lower_bound = log_px_z + neg_kld_z1 + neg_kld_z2 + log_pmu2 / num_segs
+    return lower_bound, log_px_z, neg_kld_z1, neg_kld_z2, log_pmu2
 
+
+def calculate_discriminative_loss():
     # discriminative loss
     logits = torch.unsqueeze(self.qz2_x[0], 1) - torch.unsqueeze(self.mu2_table, 0)
     logits = -1 * torch.pow(logits, 2) / (2 * torch.exp(self.pz2[1]))
     logits = torch.sum(logits, dim=-1)
     log_qy = loss(input=logits, target=target)
+    return log_qy
 
-    return -1 * torch.mean(lower_bound + alpha * log_qy)
+
+# return -1 * torch.mean(lower_bound + alpha * log_qy)
 
 
 def log_gauss(x, mu=0.0, logvar=0.0):
