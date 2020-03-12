@@ -8,69 +8,24 @@ import costs
 
 
 class SimpleFHVAE(nn.Module):
-    def __init__(self, xin, xout, mu_idx, n, nmu2):
+    def __init__(self):
         super().__init__()
-
-        # encoder/decoder arch
-        self.z1_hus, self.z1_dim = [128, 128], 16
-        self.z2_hus, self.z2_dim = [128, 128], 16
-        self.x_hus = [128, 128]
-
-        # observed vars
-        self.xin = xin
-        self.xout = xout
-        self.mu_idx = mu_idx
-        self.n = n
-        self.nmu2 = nmu2
-
-        # latent vars
-        (
-            self.mu2_table,
-            self.mu2,
-            self.qz2_x,
-            self.z2_sample,
-            self.qzi_x,
-            self.z1_sample,
-            self.px_z,
-            self.x_sample,
-        ) = self.net(
-            self.xin,
-            self.xout,
-            self.mu_idx,
-            self.nmu2,
-            self.z1_hus,
-            self.z1_dim,
-            self.z2_hus,
-            self.z2_dim,
-            self.x_hus,
-        )
 
         # priors
         self.pz1 = [0.0, np.log(1.0 ** 2).astype(np.float32)]
         self.pz2 = [self.mu2, np.log(0.0 ** 2).astype(np.float32)]
         self.pmu2 = [0.0, np.log(1.0 ** 2).astype(np.float32)]
 
-    def net(self, xin, xout, mu_idx, nmu2, z1_hus, z1_dim, z2_hus, z2_dim, x_hus):
-        """Initialize the network"""
-        self.mu2_table, self.mu2 = mu2_lookup(self.mu_idx, z2_dim, self.nmu2)
-
-        z2_pre_out = z2_pre_encoder(self.xin, z2_hus)
-        z2_mu, z2_logvar, z2_sample = gauss_layer(z2_preout, z2_dim)
-        qz2_x = [z1_mu, z1_logvar]
-
-        z1_pre_out = z1_pre_encoder(xin, z2_sample, z1_hus)
-        z1_mu, z1_logvar, z1_sample = gauss_layer(z1_pre_out, z1_dim)
-        qz1_x = [z1_mu, z1_logvar]
-
-        x_pre_out = pre_decoder(z1_sample, z2_sample, x_hus)
-        T, F = list(xout.size())[1:]
-        x_mu, x_logvar, x_sample = gauss_layer(x_pre_out, T * F)
-        x_mu = torch.reshape(x_mu, (-1, T, F))
-        x_logvar = torch.reshape(x_logvar, (-1, T, F))
-        x_sample = torch.reshape(x_sample, (-1, T, F))
-        # p(x|z_1, z_2)
-        px_z = [x_mu, x_logvar]
-        return mu2_table, mu2, qz2_x, z2_sample, qz1_x, z1_sample, px_z, x_sample
+        # encoder/decoder arch
+        self.z1_hus = [128, 128]
+        self.z2_hus = [128, 128]
+        self.z1_dim = 16
+        self.z2_dim = 16
+        self.x_hus = [128, 128]
+        self.z1_pre_encoder = LatentSegPreEncoder(self.z1_hus)
+        self.z2_pre_encoder = LatentSeqPreEncoder(self.z2_hus)
+        self.gauss_layer = GaussianLayer()
+        self.pre_decoder = PreDecoder(self.x_hus)
 
     def __str__(self):
         msg = ""
@@ -91,7 +46,7 @@ class SimpleFHVAE(nn.Module):
         msg += "\n    z2 encoder:"
         msg += "\n      FC hidden units: %s" % str(self.z2_hus)
         msg += "\n      latent dim: %s" % self.z2_dim
-        msg += "\n    mu2 table size: %s" % self.nmu2
+        msg += "\n    mu2 table size: %s" % self.num_seqs
         msg += "\n    x decoder:"
         msg += "\n      FC hidden units: %s" % str(self.x_hus)
         msg += "\n  Outputs:"
@@ -114,52 +69,44 @@ class SimpleFHVAE(nn.Module):
             msg += "\n    %s, %s" % (param.name, param.size())
         return msg
 
-    def forward(self, x, mu_idx):
-        self.mu2_table, self.mu2 = mu2_lookup()
-        pass
+    def mu2_lookup(mu_idx, z2_dim, num_seqs, init_std=1.0):
+        """
+        Mu2 posterior mean lookup table
+        Args:
+            mu_idx(torch.Tensor): int tensor of shape (bs,). Index for mu2_table
+            z2_dim(int): z2 dimension
+            num_seqs(int): lookup table size
+        """
+        mu2_table = torch.empty([num_seqs, z2_dim], requires_grad=True).normal_(
+            mean=4, std=init_std
+        )
+        mu2 = torch.gather(mu2_table, mu_idx)
+        return mu2_table, mu2
 
+    def forward(self, x, mu_idx, num_seqs):
+        """
+        Args:
+            x (torch.Tensor) input data
+            mu_idx (torch.Tensor): Int tensor of shape (bs,). Index for mu2_table
+            num_seqs (int): Size of mu2 lookup table
+        """
+        mu2_table, mu2 = self.mu2_lookup(mu_idx, self.z2_dim, num_seqs)
+        z2_pre_out = self.z2_pre_encoder(x)
+        z2_mu, z2_logvar, z2_sample = self.gauss_layer(z2_pre_out, self.z2_dim)
+        qz2_x = [z2_mu, z2_logvar]
 
-# alpha/discriminative weight of 10 was found to produce best results
-def loss_function(model, target, alpha=10.0):
-    """
-    Discriminative segment variational lower bound
-    Segment variational lower bound plus the (weighted) discriminative objective
-    """
-    loss = nn.CrossEntropyLoss()
+        z1_pre_out = self.z1_pre_encoder(x, z2_sample)
+        z1_mu, z1_logvar, z1_sample = self.gauss_layer(z1_pre_out, self, z1_dim)
+        qz1_x = [z1_mu, z1_logvar]
 
-    # variational lower bound
-    self.log_pmu2 = torch.sum(log_gauss(self.mu2, self.pmu2[0], self.pmu2[1]), dim=1)
-    self.neg_kld_z2 = -1 * torch.sum(
-        kld(self.qz2_x[0], self.qz2_x[1], self.pz2[0], self.pz2[1]), dim=1
-    )
-    self.neg_kld_z1 = -1 * torch.sum(
-        kld(self.qz1_x[0], self.qz1_x[1], self.pz1[0], self.pz1[1]), dim=1
-    )
-    self.log_px_z = torch.sum(log_gauss(xout, self.px_z[0], self.px_z[1]), dim=(1, 2))
-    lower_bound = self.log_px_z + self.neg_kld_z1 + self.neg_kld_z2 + self.log_pmu2 / n
-
-    # discriminative loss
-    logits = torch.unsqueeze(self.qz2_x[0], 1) - torch.unsqueeze(self.mu2_table, 0)
-    logits = -1 * torch.pow(logits, 2) / (2 * torch.exp(self.pz2[1]))
-    logits = torch.sum(logits, dim=-1)
-    log_qy = loss(input=logits, target=target)
-
-    return -1 * torch.mean(lower_bound + alpha * log_qy)
-
-
-def mu2_lookup(mu_idx, z2_dim, nmu2, init_std=1.0):
-    """
-    Mu2 posterior mean lookup table
-    Args:
-        mu_idx(torch.Tensor): int tensor of shape (bs,). Index for mu2_table
-        z2_dim(int): z2 dimension
-        nmu2(int): lookup table size
-    """
-    mu2_table = torch.empty([nmu2, z2_dim], requires_grad=True).normal_(
-        mean=4, std=init_std
-    )
-    mu2 = torch.gather(mu2_table, mu_idx)
-    return mu2_table, mu2
+        x_pre_out = self.pre_decoder(z1_sample, z2_sample, self, z1_hus)
+        T, F = x.shape[1:]
+        x_mu, x_logvar, x_sample = self.gauss_layer(x_pre_out, T * F)
+        x_mu = torch.reshape(x_mu, (-1, T, F))
+        x_logvar = torch.reshape(x_logvar, (-1, T, F))
+        x_sample = torch.reshape(x_sample, (-1, T, F))
+        px_z = [x_mu, x_logvar]
+        return mu2_table, mu2, qz2_x, z2_sample, qz1_x, z1_sample, px_z, x_sample
 
 
 class LatentSegPreEncoder(nn.Module):
@@ -215,13 +162,12 @@ class GaussianLayer(nn.Module):
         dim(int): dimension of output latent variables
     """
 
-    def __init__(self, dim):
+    def __init__(self):
         super().__init__()
-        self.dim = dim
 
-    def forward(self, input_layer):
-        mu = nn.Linear(np.prod(input_layer.shape[1:]), self.dim)(input_layer)
-        logvar = nn.Linear(np.prod(input_layer.shape[1:]), self.dim)(input_layer)
+    def forward(self, input_layer, dim):
+        mu = nn.Linear(np.prod(input_layer.shape[1:]), dim)(input_layer)
+        logvar = nn.Linear(np.prod(input_layer.shape[1:]), dim)(input_layer)
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu, logvar, mu + eps * std
@@ -246,6 +192,36 @@ class PreDecoder(nn.Module):
             out = nn.Linear(np.prod(out.shape[1:]), hu)(out)
             out = F.relu(out)
         return out
+
+
+# alpha/discriminative weight of 10 was found to produce best results
+def loss_function(model, target, num_segs, alpha=10.0):
+    """
+    Discriminative segment variational lower bound
+    Segment variational lower bound plus the (weighted) discriminative objective
+    """
+    loss = nn.CrossEntropyLoss()
+
+    # variational lower bound
+    self.log_pmu2 = torch.sum(log_gauss(self.mu2, self.pmu2[0], self.pmu2[1]), dim=1)
+    self.neg_kld_z2 = -1 * torch.sum(
+        kld(self.qz2_x[0], self.qz2_x[1], self.pz2[0], self.pz2[1]), dim=1
+    )
+    self.neg_kld_z1 = -1 * torch.sum(
+        kld(self.qz1_x[0], self.qz1_x[1], self.pz1[0], self.pz1[1]), dim=1
+    )
+    self.log_px_z = torch.sum(log_gauss(xout, self.px_z[0], self.px_z[1]), dim=(1, 2))
+    lower_bound = (
+        self.log_px_z + self.neg_kld_z1 + self.neg_kld_z2 + self.log_pmu2 / num_segs
+    )
+
+    # discriminative loss
+    logits = torch.unsqueeze(self.qz2_x[0], 1) - torch.unsqueeze(self.mu2_table, 0)
+    logits = -1 * torch.pow(logits, 2) / (2 * torch.exp(self.pz2[1]))
+    logits = torch.sum(logits, dim=-1)
+    log_qy = loss(input=logits, target=target)
+
+    return -1 * torch.mean(lower_bound + alpha * log_qy)
 
 
 def log_gauss(x, mu=0.0, logvar=0.0):
