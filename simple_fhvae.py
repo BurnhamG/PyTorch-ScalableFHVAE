@@ -13,7 +13,6 @@ class SimpleFHVAE(nn.Module):
 
         # priors
         self.pz1 = [0.0, np.log(1.0 ** 2).astype(np.float32)]
-        self.pz2 = [self.mu2, np.log(0.0 ** 2).astype(np.float32)]
         self.pmu2 = [0.0, np.log(1.0 ** 2).astype(np.float32)]
 
         # encoder/decoder arch
@@ -83,14 +82,37 @@ class SimpleFHVAE(nn.Module):
         mu2 = torch.gather(mu2_table, mu_idx)
         return mu2_table, mu2
 
-    def forward(self, x, mu_idx, num_seqs):
+    def log_gauss(x, mu=0.0, logvar=0.0):
+        """
+        Compute log N(x; mu, exp(logvar))
+        """
+        return -0.5 * (
+            np.log(2 * np.pi) + logvar + torch.pow(x - mu, 2) / torch.exp(logvar)
+        )
+
+    def kld(p_mu, p_logvar, q_mu, q_logvar):
+        """
+        Compute D_KL(p || q) of two Gaussians
+        """
+        return -0.5 * (
+            1
+            + p_logvar
+            - q_logvar
+            - (torch.pow(p_mu - q_mu, 2) + torch.exp(p_logvar)) / torch.exp(q_logvar)
+        )
+
+    def forward(self, x, mu_idx, num_seqs, num_segs):
         """
         Args:
-            x (torch.Tensor) input data
+            x (torch.Tensor): Input data
             mu_idx (torch.Tensor): Int tensor of shape (bs,). Index for mu2_table
             num_seqs (int): Size of mu2 lookup table
+            num_segs (int): Number of audio segments
         """
         mu2_table, mu2 = self.mu2_lookup(mu_idx, self.z2_dim, num_seqs)
+        # z2 prior
+        pz2 = [self.mu2, np.log(0.0 ** 2).astype(np.float32)]
+
         z2_pre_out = self.z2_pre_encoder(x)
         z2_mu, z2_logvar, z2_sample = self.gauss_layer(z2_pre_out, self.z2_dim)
         qz2_x = [z2_mu, z2_logvar]
@@ -106,7 +128,26 @@ class SimpleFHVAE(nn.Module):
         x_logvar = torch.reshape(x_logvar, (-1, T, F))
         x_sample = torch.reshape(x_sample, (-1, T, F))
         px_z = [x_mu, x_logvar]
-        return mu2_table, mu2, qz2_x, z2_sample, qz1_x, z1_sample, px_z, x_sample
+
+        # variational lower bound
+        log_pmu2 = torch.sum(log_gauss(mu2, self.pmu2[0], self.pmu2[1]), dim=1)
+        neg_kld_z2 = -1 * torch.sum(
+            self.kld(qz2_x[0], qz2_x[1], self.pz2[0], self.pz2[1]), dim=1
+        )
+        neg_kld_z1 = -1 * torch.sum(
+            self.kld(qz1_x[0], qz1_x[1], self.pz1[0], self.pz1[1]), dim=1
+        )
+        log_px_z = torch.sum(self.log_gauss(x, px_z[0], px_z[1]), dim=(1, 2))
+        lower_bound = log_px_z + neg_kld_z1 + neg_kld_z2 + log_pmu2 / num_segs
+
+        # discriminative loss
+        loss = nn.CrossEntropyLoss()
+        logits = torch.unsqueeze(self.qz2_x[0], 1) - torch.unsqueeze(self.mu2_table, 0)
+        logits = -1 * torch.pow(logits, 2) / (2 * torch.exp(self.pz2[1]))
+        logits = torch.sum(logits, dim=-1)
+        log_qy = loss(input=logits, target=target)
+
+        return lower_bound, log_qy
 
 
 class LatentSegPreEncoder(nn.Module):
@@ -192,53 +233,3 @@ class PreDecoder(nn.Module):
             out = nn.Linear(np.prod(out.shape[1:]), hu)(out)
             out = F.relu(out)
         return out
-
-
-# alpha/discriminative weight of 10 was found to produce best results
-def calculate_lower_bound(mu2, pmu2, qz2_x, pz2, qz1_x, pz1, num_segs, alpha=10.0):
-    """
-    Discriminative segment variational lower bound
-    Segment variational lower bound plus the (weighted) discriminative objective
-    """
-    loss = nn.CrossEntropyLoss()
-
-    # variational lower bound
-    log_pmu2 = torch.sum(log_gauss(mu2, pmu2[0], pmu2[1]), dim=1)
-    neg_kld_z2 = -1 * torch.sum(kld(qz2_x[0], qz2_x[1], pz2[0], pz2[1]), dim=1)
-    neg_kld_z1 = -1 * torch.sum(kld(qz1_x[0], qz1_x[1], pz1[0], pz1[1]), dim=1)
-    log_px_z = torch.sum(log_gauss(xout, px_z[0], px_z[1]), dim=(1, 2))
-    lower_bound = log_px_z + neg_kld_z1 + neg_kld_z2 + log_pmu2 / num_segs
-    return lower_bound, log_px_z, neg_kld_z1, neg_kld_z2, log_pmu2
-
-
-def calculate_discriminative_loss():
-    # discriminative loss
-    logits = torch.unsqueeze(self.qz2_x[0], 1) - torch.unsqueeze(self.mu2_table, 0)
-    logits = -1 * torch.pow(logits, 2) / (2 * torch.exp(self.pz2[1]))
-    logits = torch.sum(logits, dim=-1)
-    log_qy = loss(input=logits, target=target)
-    return log_qy
-
-
-# return -1 * torch.mean(lower_bound + alpha * log_qy)
-
-
-def log_gauss(x, mu=0.0, logvar=0.0):
-    """
-    Compute log N(x; mu, exp(logvar))
-    """
-    return -0.5 * (
-        np.log(2 * np.pi) + logvar + torch.pow(x - mu, 2) / torch.exp(logvar)
-    )
-
-
-def kld(p_mu, p_logvar, q_mu, q_logvar):
-    """
-    Compute D_KL(p || q) of two Gaussians
-    """
-    return -0.5 * (
-        1
-        + p_logvar
-        - q_logvar
-        - (torch.pow(p_mu - q_mu, 2) + torch.exp(p_logvar)) / torch.exp(q_logvar)
-    )
