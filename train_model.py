@@ -43,6 +43,15 @@ print(args)
 
 # load data
 
+# if args.dataset == 'timit':
+#     preprocess_timit()
+# else:
+#     preprocess_librispeech()
+# if args.is_numpy:
+#   prepare_numpy(args.dataset, ...)
+# else:
+#   prepare_kaldi(args.dataset, ...)
+
 # load model
 
 # set up experiment directory

@@ -26,7 +26,7 @@ def write_scp(root_dir: str, out_path: str, set_list: list) -> None:
 
 def process_librispeech(
     root_dir: str,
-    output_dir: str = "./datasets/librispeech_np_fbank",
+    output_dir: str = "./datasets/librispeech",
     train_list: list = None,
     dev_list: list = None,
     test_list: list = None,
@@ -34,6 +34,7 @@ def process_librispeech(
     """Generates .scp files for the Librispeech dataset
 
     Args:
+        root_dir:   Base directory
         output_dir: Where .scp files should be saved
         train_list: Training sets to process
         dev_list:   Development sets to process
@@ -71,7 +72,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--out_dir",
         type=str,
-        default="./datasets/librispeech_np_fbank",
+        default="./datasets/librispeech",
         help="output data directory",
     )
     parser.add_argument(
