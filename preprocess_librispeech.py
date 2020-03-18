@@ -42,9 +42,9 @@ def process_librispeech(
     # avoid mutable default args
     if train_list is None:
         train_list = ["train-clean-100"]
-    if train_list is None:
+    if dev_list is None:
         dev_list = ["dev-clean", "dev-other"]
-    if train_list is None:
+    if test_list is None:
         test_list = ["test-clean", "dev-other"]
 
     write_scp(root_dir, f"{output_dir}/train/wav.scp", train_list)
