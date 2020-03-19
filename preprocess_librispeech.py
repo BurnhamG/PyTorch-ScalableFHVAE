@@ -25,7 +25,7 @@ def write_scp(root_dir: str, out_path: str, set_list: list) -> None:
 
 
 def process_librispeech(
-    root_dir: str,
+    raw_data_dir: str,
     output_dir: str = "./datasets/librispeech",
     train_list: list = None,
     dev_list: list = None,
@@ -34,11 +34,11 @@ def process_librispeech(
     """Generates .scp files for the Librispeech dataset
 
     Args:
-        root_dir:   Base directory
-        output_dir: Where .scp files should be saved
-        train_list: Training sets to process
-        dev_list:   Development sets to process
-        test_list:  Test sets to process
+        raw_data_dir: Base directory
+        output_dir:   Where .scp files should be saved
+        train_list:   Training sets to process
+        dev_list:     Development sets to process
+        test_list:    Test sets to process
     """
     # avoid mutable default args
     if train_list is None:
@@ -48,9 +48,9 @@ def process_librispeech(
     if test_list is None:
         test_list = ["test-clean", "dev-other"]
 
-    write_scp(root_dir, f"{output_dir}/train/wav.scp", train_list)
-    write_scp(root_dir, f"{output_dir}/dev/wav.scp", dev_list)
-    write_scp(root_dir, f"{output_dir}/test/wav.scp", test_list)
+    write_scp(raw_data_dir, f"{output_dir}/train/wav.scp", train_list)
+    write_scp(raw_data_dir, f"{output_dir}/dev/wav.scp", dev_list)
+    write_scp(raw_data_dir, f"{output_dir}/test/wav.scp", test_list)
 
     print("generated wav scp")
 
@@ -99,4 +99,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
 
-    process_librispeech(args.out_dir, args.train_list, args.dev_list, args.test_list)
+    process_librispeech(
+        args.librispeech_dir,
+        args.out_dir,
+        args.train_list,
+        args.dev_list,
+        args.test_list,
+    )

@@ -5,29 +5,119 @@ import numpy as np
 import os
 import sys
 import time
+import contextlib
+from multiprocessing import Pool
+
+
+def generate_feat(ftype, audio_data, sample_rate, win_t, hop_t, n_mels):
+    if ftype == "fbank":
+        feat = np.transpose(
+            AudioUtils.to_melspec(
+                audio_data,
+                sample_rate,
+                int(sample_rate * win_t),
+                hop_t,
+                win_t,
+                n_mels=n_mels,
+            )
+        )
+    else:
+        feat = np.transpose(
+            AudioUtils.rstft(
+                audio_data, sample_rate, int(sample_rate * win_t), hop_t, win_t
+            )
+        )
+    return feat
+
+
+def save_feats(
+    set_name, dataset, ftype, sample_rate, win_t, hop_t, n_mels, paths: dict = None
+):
+    if paths is None:
+        paths = {}
+
+    root_dir = os.path.abspath(f"./datasets/{dataset}")
+    if paths.get("output_dir") is not None:
+        set_path = paths.get("output_dir")
+    else:
+        set_path = os.path.join(root_dir, set_name)
+    if paths.get("wav_scp") is not None:
+        wav_path = paths.get("wav_scp")
+    else:
+        wav_path = os.path.join(set_path, "wav.scp")
+    if paths.get("feat_scp") is not None:
+        feat_path = paths.get("feat_scp")
+    else:
+        feat_path = os.path.join(set_path, "feats.scp")
+    if paths.get("len_scp") is not None:
+        len_path = paths.get("len_scp")
+    else:
+        len_path = os.path.join(set_path, "len.scp")
+
+    set_start_time = time.time()
+    count = 0
+    with contextlib.ExitStack() as stack:
+        wavfile = stack.enter_context(open(wav_path))
+        featfile, lenfile = [
+            stack.enter_context(open(f, "w")) for f in [feat_path, len_path]
+        ]
+        for i, line in enumerate(wavfile):
+            seq, path = line.rstrip().split()
+            y, _sr = librosa.load(path, sample_rate, mono=True)
+            if sample_rate is None:
+                sample_rate = _sr
+            elif sample_rate != _sr:
+                raise ValueError(f"Inconsistent sample rate ({sample_rate} != {_sr}.")
+
+            feat = generate_feat(ftype, y, sample_rate, win_t, hop_t, n_mels)
+            np_path = os.path.join(set_path, "numpy", f"{seq}.npy")
+            with open(np_path, "wb") as numpyfile:
+                np.save(numpyfile, feat)
+            featfile.write(f"{seq} {np_path}\n")
+            lenfile.write(f"{seq} {len(feat)}\n")
+            count = i + 1
+            if (count) % 1000 == 0:
+                print(
+                    f"{count} files in {set_name} set over {time.time() - set_start_time} seconds."
+                )
+    return count
 
 
 def prepare_numpy(
     dataset: str,
-    save_feats: bool = True,
-    np_dir: str = None,
     ftype: str = "fbank",
     sample_rate: int = None,
     win_t: float = 0.025,
     hop_t: float = 0.010,
     n_mels: int = 80,
-):
-    root_dir = os.path.abspath(f"./datasets/{dataset}")
-    if save_feats:
-        if np_dir is None:
-            np_dir = os.path.abspath(f"./datasets/{dataset.strip()}/numpy/{ftype}")
-        maybe_makedir(np_dir)
-        for set in ['train','dev','test']:
-            set_path = os.path.join(np_path,set)
-            maybe_makedir(os.path.dirname
+    **kwargs,
+) -> None:
+    """Generates features and writes the Kaldi script files
 
+    Args:
+        dataset:     Name of the dataset for which features are generated
+        ftype:       Type of computed feature
+        sample_rate: Sample rate for resampling if not None
+        win_t:       FFT window size in seconds
+        hop_t:       Frame spacing in seconds
+        n_mels:      Number of filter banks if using 'fbank' as the computed feature
 
-    librosa.load(path, sample_rate, mono=True)
+    """
+    paths = {}
+    for pathvar in ["wave_scp", "output_dir", "feat_scp", "len_scp"]:
+        if pathvar in kwargs:
+            paths[pathvar] = kwargs[pathvar]
+
+    func_args = [dataset, ftype, sample_rate, win_t, hop_t, n_mels, paths]
+    files_start_time = time.time()
+    with Pool(3) as p:
+        results = p.starmap(
+            save_feats, [tuple([s] + func_args) for s in ["train", "dev", "test"]]
+        )
+
+    print(
+        f"Processed {sum(results)} files in {time.time() - files_start_time} seconds."
+    )
 
 
 if __name__ == "__main__":
@@ -38,6 +128,13 @@ if __name__ == "__main__":
     parser.add_argument("np_dir", type=str, help="output directory for numpy matrices")
     parser.add_argument("feat_scp", type=str, help="output feats.scp file")
     parser.add_argument("len_scp", type=str, help="output len.scp file")
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="librispech",
+        choices=["librispeech", "timit"],
+        help="Dataset name",
+    )
     parser.add_argument(
         "--ftype",
         type=str,
@@ -66,18 +163,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
 
-    reader = lambda path: librosa.load(path, args.sr, mono=True)
-    if args.ftype == "fbank":
-        mapper = lambda y, sr: np.transpose(
-            AudioUtils.to_melspec(
-                y, sr, int(sr * args.win_t), args.hop_t, args.win_t, n_mels=args.n_mels
-            )
-        )
-    elif args.ftype == "spec":
-        mapper = lambda y, sr: np.transpose(
-            AudioUtils.rstft(y, sr, int(sr * args.win_t), args.hop_t, args.win_t)
-        )
-
     prepare_numpy(
-        args.wav_scp, args.np_dir, args.feat_scp, args.len_scp, reader, mapper
+        args.dataset,
+        args.ftype,
+        args.sr,
+        args.win_t,
+        args.hop_t,
+        args.n_mels,
+        wav_scp=args.wav_scp,
+        feat_scp=args.feat_scp,
+        len_scp=args.len_scp,
+        output_dir=args.np_dir,
     )
