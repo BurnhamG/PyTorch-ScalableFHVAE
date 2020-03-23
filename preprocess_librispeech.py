@@ -1,21 +1,29 @@
 import os
 import argparse
-from .utils import maybe_makedir
+from typing import List, Tuple
 
 
 # dump wav scp
-def find_audios(dir: str) -> list:
-    """Find .flac files in the given directory"""
+def find_audios(dir: str) -> List[Tuple[str, str]]:
+    """Find .flac files in the given directory
+
+    Args:
+        dir: Directory to search
+
+    Returns:
+        Sorted list of (audio_identifier, path_to_file) for all files found
+
+    """
     uid_path = []
-    for root, _, fnames in sorted(os.walk(dir)):
-        for fname in fnames:
-            if fname.endswith(".flac") or fname.endswith(".FLAC"):
-                uid_path.append((os.path.splitext(fname)[0], f"{root}/{fname}"))
+    for file in sorted(os.listdir(dir)):
+        if file.lower().endswith(".flac"):
+            uid_path.append((os.path.splitext(file)[0], os.path.join(dir, file)))
     return sorted(uid_path, key=lambda x: x[0])
 
 
 def write_scp(root_dir: str, out_path: str, set_list: list) -> None:
-    maybe_makedir(os.path.dirname(out_path))
+    """Writes uid and audio path to Kaldi .scp file"""
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, "w") as f:
         uid_path = []
         for set in set_list:
@@ -39,6 +47,7 @@ def process_librispeech(
         train_list:   Training sets to process
         dev_list:     Development sets to process
         test_list:    Test sets to process
+
     """
     # avoid mutable default args
     if train_list is None:

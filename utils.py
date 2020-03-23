@@ -1,33 +1,33 @@
-import os
-import sys
 import librosa
 import numpy as np
-
-
-def maybe_makedir(d):
-    try:
-        os.makedirs(d, exist_ok=True)
-    except OSError as e:
-        print(e)
-        sys.exit(2)
+from nptyping import Array
 
 
 class AudioUtils:
     @staticmethod
     def stft(
-        y, sr, n_fft=400, hop_t=0.010, win_t=0.025, window="hamming", preemphasis=0.97
-    ):
-        """
-        Short time Fourier Transform
+        y: Array[float],
+        sr: int,
+        n_fft: int = 400,
+        hop_t: float = 0.010,
+        win_t: float = 0.025,
+        window: str = "hamming",
+        preemphasis: float = 0.97,
+    ) -> Array[float]:
+        """Short time Fourier Transform
+
         Args:
-            y(np.ndarray): raw waveform of shape (T,)
-            sr(int): sample rate
-            hop_t(float): spacing (in second) between consecutive frames
-            win_t(float): window size (in second)
-            window(str): type of window applied for STFT
-            preemphasis(float): pre-emphasize raw signal with y[t] = x[t] - r*x[t-1]
-        Return:
-            (np.ndarray): (n_fft / 2 + 1, N) matrix; N is number of frames
+            y:           Raw waveform of shape (T,)
+            sr:          Sample rate
+            n_fft:       Length of the FFT window
+            hop_t:       Spacing (in seconds) between consecutive frames
+            win_t:       Window size (in seconds)
+            window:      Type of window applied for STFT
+            preemphasis: Pre-emphasize raw signal with y[t] = x[t] - r*x[t-1]
+
+        Returns:
+            (n_fft / 2 + 1, N) matrix; N is number of frames
+
         """
         if preemphasis > 1e-12:
             y = y - preemphasis * np.concatenate([[0], y[:-1]], 0)
@@ -39,28 +39,32 @@ class AudioUtils:
 
     @staticmethod
     def rstft(
-        y,
-        sr,
-        n_fft=400,
-        hop_t=0.010,
-        win_t=0.025,
-        window="hamming",
-        preemphasis=0.97,
-        log=True,
-        log_floor=-50,
-    ):
-        """
-        Compute (log) magnitude spectrogram
+        y: Array[float],
+        sr: int,
+        n_fft: int = 400,
+        hop_t: float = 0.010,
+        win_t: float = 0.025,
+        window: str = "hamming",
+        preemphasis: float = 0.97,
+        log: bool = True,
+        log_floor: int = -50,
+    ) -> Array[float]:
+        """Computes (log) magnitude spectrogram
+
         Args:
-            y(np.ndarray):
-            sr(int):
-            hop_t(float):
-            win_t(float):
-            window(str):
-            preemphasis(float):
-            log(bool):
-        Return:
-            (np.ndarray): (n_fft / 2 + 1, N) matrix; N is number of frames
+            y:           Raw waveform of shape (T,)
+            sr:          Sample rate
+            n_fft:       Length of the FFT window
+            hop_t:       Spacing (in seconds) between consecutive frames
+            win_t:       Window size (in seconds)
+            window:      Type of window applied for STFT
+            preemphasis: Pre-emphasize raw signal with y[t] = x[t] - r*x[t-1]
+            log:         If True, uses log magnitude
+            log_floor:   Floor value for log scaling of magnitude
+
+        Returns:
+            (n_fft / 2 + 1, N) matrix; N is number of frames
+
         """
         spec = AudioUtils.stft(y, sr, n_fft, hop_t, win_t, window, preemphasis)
         spec = np.abs(spec)
@@ -71,33 +75,35 @@ class AudioUtils:
 
     @staticmethod
     def to_melspec(
-        y,
-        sr,
-        n_fft=400,
-        hop_t=0.010,
-        win_t=0.025,
-        window="hamming",
-        preemphasis=0.97,
-        n_mels=80,
-        log=True,
-        norm_mel=None,
-        log_floor=-20,
-    ):
-        """
-        Compute Mel-scale filter bank coefficients:
+        y: Array[float, 1],
+        sr: int,
+        n_fft: int = 400,
+        hop_t: float = 0.010,
+        win_t: float = 0.025,
+        window: str = "hamming",
+        preemphasis: float = 0.97,
+        n_mels: int = 80,
+        log: bool = True,
+        norm_mel: bool = False,
+        log_floor: int = -20,
+    ) -> Array[float]:
+        """Compute Mel-scale filter bank coefficients:
+
         Args:
-            y(np.ndarray):
-            sr(int):
-            hop_t(float):
-            win_t(float):
-            window(str):
-            preemphasis(float):
-            n_mels(int): number of filter banks, which are equally spaced in Mel-scale
-            log(bool):
-            norm_mel(None/1): normalize each filter bank to have area of 1 if set to 1;
-                otherwise the peak value of eahc filter bank is 1
-        Return:
-            (np.ndarray): (n_mels, N) matrix; N is number of frames
+            y:           Numpy array of audio sample
+            sr:          Sample rate
+            hop_t:       Spacing (in seconds) between consecutive frames
+            win_t:       Window size (in seconds)
+            window:      Type of window applied for STFT
+            preemphasis: Pre-emphasize raw signal with y[t] = x[t] - r*x[t-1]
+            n_mels:      Number of filter banks, which are equally spaced in Mel-scale
+            log:         If True, use log magnitude
+            norm_mel:    Normalize each filter bank to have area of 1 if True;
+                             otherwise the peak value of each filter bank is 1
+
+        Returns:
+            (n_mels, N) matrix; N is number of frames
+
         """
         spec = AudioUtils.rstft(
             y, sr, n_fft, hop_t, win_t, window, preemphasis, log=False
@@ -117,9 +123,25 @@ class AudioUtils:
         return melspec
 
     @staticmethod
-    def energy_vad(y, sr, hop_t=0.010, win_t=0.025, th_ratio=1.04 / 2):
-        """
-        Compute energy-based VAD
+    def energy_vad(
+        y: Array[float],
+        sr: int,
+        hop_t: float = 0.010,
+        win_t: float = 0.025,
+        th_ratio: float = 1.04 / 2,
+    ) -> Array[bool]:
+        """Compute energy-based VAD (Voice activity detection)
+
+        Args:
+            y:        Numpy array of audio sample
+            sr:       Sample rate
+            hop_t:    Spacing (in seconds) between consecutive frames
+            win_t:    Window size (in seconds)
+            th_ratio: Energy threshold ratio for detection
+
+        Returns:
+            Boolean vector indicating whether voice was detected
+
         """
         hop_length = int(sr * hop_t)
         win_length = int(sr * win_t)

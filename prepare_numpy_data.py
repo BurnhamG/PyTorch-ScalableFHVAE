@@ -1,15 +1,34 @@
-from utils import maybe_makedir, AudioUtils
+from utils import AudioUtils
 import argparse
 import librosa
 import numpy as np
 import os
-import sys
 import time
 import contextlib
 from multiprocessing import Pool
+from nptyping import Array
+from typing import Dict
 
 
-def generate_feat(ftype, audio_data, sample_rate, win_t, hop_t, n_mels):
+def generate_feat(
+    ftype: str,
+    audio_data: Array[float],
+    sample_rate: int,
+    win_t: float,
+    hop_t: float,
+    n_mels: int,
+) -> Array[float]:
+    """Generates the features for an audio sample
+
+    Args:
+        ftype:       Type of computed feature
+        audio_data:  Input audio sample
+        sample_rate: Audio sample rate
+        win_t:       FFT window size in seconds
+        hop_t:       Frame spacing in seconds
+        n_mels:      Number of filter banks if using 'fbank' as the computed feature
+
+    """
     if ftype == "fbank":
         feat = np.transpose(
             AudioUtils.to_melspec(
@@ -31,8 +50,31 @@ def generate_feat(ftype, audio_data, sample_rate, win_t, hop_t, n_mels):
 
 
 def save_feats(
-    set_name, dataset, ftype, sample_rate, win_t, hop_t, n_mels, paths: dict = None
-):
+    dataset: str,
+    set_name: str,
+    ftype: str,
+    sample_rate: int,
+    win_t: float,
+    hop_t: float,
+    n_mels: int,
+    paths: Dict[str, str] = None,
+) -> int:
+    """Saves the generated features and script files for a dataset
+
+    Args:
+        dataset:     Name of the dataset (i.e. librispeech) being used
+        set_name:    Name of the set (train, dev, test) to operate on
+        ftype:       Type of computed feature
+        sample_rate: Sample rate for resampling if not None
+        win_t:       FFT window size in seconds
+        hop_t:       Frame spacing in seconds
+        n_mels:      Number of filter banks if using 'fbank' as the computed feature
+        paths:       Dictionary of (optional) paths for saving files
+
+    Returns:
+        Number of files that were processed
+
+    """
     if paths is None:
         paths = {}
 
@@ -92,7 +134,7 @@ def prepare_numpy(
     n_mels: int = 80,
     **kwargs,
 ) -> None:
-    """Generates features and writes the Kaldi script files
+    """Handles feature and script file generation and saving
 
     Args:
         dataset:     Name of the dataset for which features are generated
@@ -108,12 +150,17 @@ def prepare_numpy(
         if pathvar in kwargs:
             paths[pathvar] = kwargs[pathvar]
 
-    func_args = [dataset, ftype, sample_rate, win_t, hop_t, n_mels, paths]
+    for path in paths:
+        os.makedirs(paths[path], exist_ok=True)
+
+    starmap_args = []
+    for s in ["train", "dev", "test"]:
+        func_args = [dataset, s, ftype, sample_rate, win_t, hop_t, n_mels, paths]
+        starmap_args.append(tuple(func_args))
+
     files_start_time = time.time()
     with Pool(3) as p:
-        results = p.starmap(
-            save_feats, [tuple([s] + func_args) for s in ["train", "dev", "test"]]
-        )
+        results = p.starmap(save_feats, starmap_args)
 
     print(
         f"Processed {sum(results)} files in {time.time() - files_start_time} seconds."
