@@ -8,7 +8,7 @@ import numpy as np
 
 
 def scp2dict(path, dtype=str, seqlist=None):
-    """Convert an scp file to a dictionary
+    """Convert an scp file to a dictionary.
 
     Args:
         path:    Path to scp file
@@ -29,43 +29,16 @@ def scp2dict(path, dtype=str, seqlist=None):
     return d
 
 
-def make_segs(seqs, lens, labs, talabs, seg_len, seg_shift, rand_seg):
-    """
-    Args:
-        seqs(list): list of sequences
-        lens(list): list of sequence lengths
-        labs(list): list of sequence label lists
-        talabs(list): list of sequence time-aligned label sequence lists
-        seg_len(int):
-        seg_shift(int):
-        rand_seg(bool):
-    """
-    segs = []
-    nsegs = []
-    for seq, l, lab, talab in zip(seqs, lens, labs, talabs):
-        nseg = (l - seg_len) // seg_shift + 1
-        nsegs.append(nseg)
-        if rand_seg:
-            starts = np.random.choice(range(l - seg_len + 1), nseg)
-        else:
-            starts = np.arange(nseg) * seg_shift
-        for start in starts:
-            end = start + seg_len
-            seg_talab = [s.center_lab(start, end) for s in talab]
-            segs.append(Segment(seq, start, end, lab, seg_talab))
-    return segs, nsegs
-
-
 class Segment(object):
-    def __init__(self, seq, start, end, lab, talab):
+    """Represents an audio segment."""
+
+    def __init__(self, seq, start, end):
         self.seq = seq
         self.start = start
         self.end = end
-        self.lab = lab
-        self.talab = talab
 
     def __str__(self):
-        return f"{self.seq}, {self.start}, {self.end}, {self.lab},{ self.talab}"
+        return f"{self.seq}, {self.start}, {self.end}"
 
     def __repr__(self):
         return str(self)
@@ -76,65 +49,94 @@ class NumpyDataset(Dataset):
         self,
         feat_scp: str,
         len_scp: str,
-        lab_specs: list = None,
-        talab_specs: list = None,
         min_len: int = 1,
+        seg_len: int = 20,
+        seg_shift: int = 8,
+        rand_seg: bool = False,
     ):
         """
         Args:
-            feat_scp(str): feature scp path
-            len_scp(str): sequence-length scp path
-            lab_specs(list): list of label specifications. each is
-                (name, number of classes, scp path)
-            talab_specs(list): list of time-aligned label specifications.
-                each is (name, number of classes, ali path)
-            min_len(int): keep sequence no shorter than min_len
+            feat_scp(str):  Feature scp path
+            len_scp(str):   Sequence-length scp path
+            min_len(int):   Keep sequence no shorter than min_len
+            seg_len(int):   Segment length
+            seg_shift(int): Segment shift if seg_rand is False; otherwise randomly
+                                extract floor(seq_len/seg_shift) segments per sequence
+            rand_seg(bool): If True, randomly extract segments
         """
         feats = scp2dict(feat_scp)
         lens = scp2dict(len_scp, int, feats.keys())
+
+        self.seg_len = seg_len
+        self.seg_shift = seg_shift
+        self.rand_seg = rand_seg
 
         self.seqlist = [k for k in feats.keys() if lens[k] >= min_len]
         self.feats = OrderedDict([(k, feats[k]) for k in self.seqlist])
         self.lens = OrderedDict([(k, lens[k]) for k in self.seqlist])
 
-        self.labs_d = OrderedDict()
-        self.talabseqs_d = OrderedDict()
-        if lab_specs is not None:
-            for lab_spec in lab_specs:
-                name, nclass, seq2lab = load_lab(lab_spec, self.seqlist)
-                self.labs_d[name] = Labels(name, nclass, seq2lab)
-        if talab_specs is not None:
-            for talab_spec in talab_specs:
-                name, nclass, seq2talabs = load_talab(talab_spec, self.seqlist)
-                self.talabseqs_d[name] = TimeAlignedLabelSeqs(name, nclass, seq2talabs)
+        self.seq_keys, self.seq_feats, self.seq_lens = self._make_seq_lists(
+            self.seqlist
+        )
+        self.segs, self.seq_nsegs = self._make_segs(
+            self.seq_keys, self.seq_lens, self.seg_len, self.seg_shift, self.rand_seg
+        )
+        self.seq2idx = dict([(seq, i) for i, seq in enumerate(self.seq_keys)])
 
     def __len__(self):
         return len(self.seqlist)
 
     def __getitem__(self, index):
-        """Returns key, feat, sequence length, included label, included time-aligned label"""
-        return self.seqlist[index], self.feats[index], self.lens[index]
+        """Returns key(sequence), feature, and number of segments."""
+        seg = self.segs[index]
+        idx = self.seq2idx[seg.seq]
+        key = self.seq_keys[idx]
+        feat = self.seq_feats[idx][seg.start : seg.end]
+        nsegs = self.seq_nsegs[idx]
 
-    def _make_seqs(self, seqlist, lab_names, talab_names, shuffle=False):
-        """
-        Yields:
-            key:   Sequence, used as a key
-            feat:  Feature for the corresponding sequence
-            leng:  Length of the corresponding sequence
-            lab:   List of corresponding labels(int list)
-            talab: List of corresponding time-aligned labels(talabel list)
-        """
-        if shuffle:
-            np.random.shuffle(seqlist)
+        return key, feat, nsegs
 
-        lab, talab = [], []
+    def _make_seq_lists(self, seqlist):
+        """Return lists of all sequences and the corresponding features and lengths."""
+        keys, feats, lens = [], [], []
         for seq in seqlist:
-            key = seq
-            feat = self.feats[seq]
-            leng = self.lens[seq]
-            lab = [self.labs_d[name][seq] for name in lab_names]
-            talab = [self.talabseqs_d[name][seq] for name in talab_names]
-            yield key, feat, leng, lab, talab
+            keys.append(seq)
+            feats.append(self.feats[seq])
+            lens.append(self.lens[seq])
+
+        return keys, feats, lens
+
+    def _make_segs(
+        self,
+        seqs: list,
+        lens: list,
+        seg_len: int = 20,
+        seg_shift: int = 8,
+        rand_seg: bool = False,
+    ):
+        """Make segments from a list of sequences.
+
+        Args:
+            seqs:      List of sequences
+            lens:      List of sequence lengths
+            seg_len:   Segment length
+            seg_shift: Segment shift if rand_seg is False; otherwise randomly
+                           extract floor(seq_len/seg_shift) segments per sequence
+            rand_seg:  If True, randomly extract segments
+        """
+        segs = []
+        nsegs = []
+        for seq, l in zip(seqs, lens):
+            nseg = (l - seg_len) // seg_shift + 1
+            nsegs.append(nseg)
+            if rand_seg:
+                starts = np.random.choice(range(l - seg_len + 1), nseg)
+            else:
+                starts = np.arange(nseg) * seg_shift
+            for start in starts:
+                end = start + seg_len
+                segs.append(Segment(seq, start, end))
+        return segs, nsegs
 
 
 # class KaldiDataset(Dataset):
