@@ -5,6 +5,8 @@ import torchaudio
 import os
 from collections import OrderedDict
 import numpy as np
+import json
+from pykaldi import RandomAccessMatrixReader
 
 
 def scp2dict(path, dtype=str, seqlist=None):
@@ -44,12 +46,13 @@ class Segment(object):
         return str(self)
 
 
-class NumpyDataset(Dataset):
+class BaseDataset(Dataset):
     def __init__(
         self,
         feat_scp: str,
         len_scp: str,
         min_len: int = 1,
+        mvn_path: str = None,
         seg_len: int = 20,
         seg_shift: int = 8,
         rand_seg: bool = False,
@@ -59,6 +62,8 @@ class NumpyDataset(Dataset):
             feat_scp(str):  Feature scp path
             len_scp(str):   Sequence-length scp path
             min_len(int):   Keep sequence no shorter than min_len
+            mvn_path:       Path to file storing the mean and variance of the sequences
+                                for normalization
             seg_len(int):   Segment length
             seg_shift(int): Segment shift if seg_rand is False; otherwise randomly
                                 extract floor(seq_len/seg_shift) segments per sequence
@@ -72,7 +77,7 @@ class NumpyDataset(Dataset):
         self.rand_seg = rand_seg
 
         self.seqlist = [k for k in feats.keys() if lens[k] >= min_len]
-        self.feats = OrderedDict([(k, feats[k]) for k in self.seqlist])
+        self.feat_dict = OrderedDict([(k, feats[k]) for k in self.seqlist])
         self.lens = OrderedDict([(k, lens[k]) for k in self.seqlist])
 
         self.seq_keys, self.seq_feats, self.seq_lens = self._make_seq_lists(
@@ -82,6 +87,43 @@ class NumpyDataset(Dataset):
             self.seq_keys, self.seq_lens, self.seg_len, self.seg_shift, self.rand_seg
         )
         self.seq2idx = dict([(seq, i) for i, seq in enumerate(self.seq_keys)])
+
+        if mvn_path is not None:
+            if not os.path.exists(mvn_path):
+                self.mvn_params = self.compute_mvn()
+                with open(mvn_path, "w") as f:
+                    json.dump(self.mvn_params, f)
+            else:
+                with open(mvn_path) as f:
+                    self.mvn_params = json.load(f)
+        else:
+            self.mvn_params = None
+
+    def apply_mvn(self, feats):
+        """Apply mean and variance normalization."""
+        if self.mvn_params is None:
+            return feats
+        else:
+            return (feats - self.mvn_params["mean"]) / self.mvn_params["std"]
+
+    def compute_mvn(self):
+        """Compute mean and variance normalization."""
+        n, x, x2 = 0.0, 0.0, 0.0
+        for seq in self.seqlist:
+            feat = self.feats[seq]
+            x += np.sum(feat, axis=0, keepdims=True)
+            x2 += np.sum(feat ** 2, axis=0, keepdims=True)
+            n += feat.shape[0]
+        mean = x / n
+        std = np.sqrt(x2 / n - mean ** 2)
+        return {"mean": mean, "std": std}
+
+    def undo_mvn(self, feats):
+        """Undo mean and variance normalization."""
+        if self.mvn_params is None:
+            return feats
+        else:
+            return feats * self.mvn_params["std"] + self.mvn_params["mean"]
 
     def __len__(self):
         return len(self.seqlist)
@@ -139,4 +181,55 @@ class NumpyDataset(Dataset):
         return segs, nsegs
 
 
-# class KaldiDataset(Dataset):
+class NumpyDataset(BaseDataset):
+    def __init__(
+        self,
+        feat_scp: str,
+        len_scp: str,
+        min_len: int = 1,
+        mvn_path: str = None,
+        seg_len: int = 20,
+        seg_shift: int = 8,
+        rand_seg: bool = False,
+    ):
+        """
+        Args:
+            feat_scp(str):  Feature scp path
+            len_scp(str):   Sequence-length scp path
+            min_len(int):   Keep sequence no shorter than min_len
+            seg_len(int):   Segment length
+            seg_shift(int): Segment shift if seg_rand is False; otherwise randomly
+                                extract floor(seq_len/seg_shift) segments per sequence
+            rand_seg(bool): If True, randomly extract segments
+        """
+        super().__init__(
+            feat_scp, len_scp, min_len, mvn_path, seg_len, seg_shift, rand_seg
+        )
+
+        self.feats = self.feat_getter(self.feat_dict)
+
+    class feat_getter:
+        def __init__(self, feats):
+            self.feats = dict(feats)
+
+        def __getitem__(self, seq):
+            with open(self.feats[seq]) as f:
+                feat = np.load(f)
+            return feat
+
+
+class KaldiDataset(BaseDataset):
+    def __init__(
+        self,
+        feat_scp: str,
+        len_scp: str,
+        min_len: int = 1,
+        mvn_path: str = None,
+        seg_len: int = 20,
+        seg_shift: int = 8,
+        rand_seg: bool = False,
+    ):
+        super().__init__(
+            feat_scp, len_scp, min_len, mvn_path, seg_len, seg_shift, rand_seg
+        )
+        self.feats = RandomAccessMatrixReader(f"scp:{feat_scp}")
