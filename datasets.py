@@ -6,7 +6,7 @@ import os
 from collections import OrderedDict
 import numpy as np
 import json
-from pykaldi import RandomAccessMatrixReader
+from kaldiio import load_scp
 
 
 def scp2dict(path, dtype=str, seqlist=None):
@@ -232,4 +232,4 @@ class KaldiDataset(BaseDataset):
         super().__init__(
             feat_scp, len_scp, min_len, mvn_path, seg_len, seg_shift, rand_seg
         )
-        self.feats = RandomAccessMatrixReader(f"scp:{feat_scp}")
+        self.feats = load_scp(f"scp:{feat_scp}")
