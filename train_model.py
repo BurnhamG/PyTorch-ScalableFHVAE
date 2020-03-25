@@ -6,10 +6,18 @@ import datasets
 from preprocess_timit import process_timit
 from preprocess_librispeech import process_librispeech
 from pathlib import Path
+from prepare_numpy_data import prepare_numpy
+from prepare_kaldi_data import prepare_kaldi
+import time
+from multiprocessing import Pool
+from utils import create_output_dir
+from simple_fhvae import SimpleFHVAE
+from fhvae import FHVAE
 
 
 def train_model(
     dataset: str,
+    raw_data_dir: str,
     feat_type: str = "fbank",
     data_format: str = "numpy",
     model_type: str = "fhvae",
@@ -18,11 +26,13 @@ def train_model(
     n_patience: int = 10,
     steps_per_epoch: int = 5000,
     print_steps: int = 200,
+    is_preprocessed: bool = True,
 ):
     """Loads data and trains the model
 
     Args:
         dataset:         The dataset to use for training
+        raw_data_dir:
         feat_type:       Type of feature to compute (only affects numpy data format)
         data_format:     How the computed features should be stored
         model_type:      Type of model to use for training
@@ -31,22 +41,68 @@ def train_model(
         n_patience:      Maximum number of consecutive epochs without improvement
         steps_per_epoch: Training steps per epoch
         print_steps:     Interval for printing statistics
+        is_preprocessed:
 
     """
+    if args.raw_data_dir is None and args.is_preprocessed is False:
+        raise ValueError(
+            "You must provide a raw data location if the data is not preprocessed!"
+        )
 
     # load data
-    root_dir = Path(f"./datasets/{args.dataset}")
-    if dataset == "timit":
-        process_timit(str(root_dir), feat_type, data_format)
-    else:
-        process_librispeech(str(root_dir), feat_type, data_format)
-    # if args.is_numpy:
-    #   prepare_numpy(args.dataset, ...)
-    # else:
-    #   prepare_kaldi(args.dataset, ...)
+    dataset_directory = create_output_dir(dataset, feat_type, data_format)
+
+    if not is_preprocessed:
+        if dataset == "timit":
+            paths = process_timit(Path(raw_data_dir), dataset_directory)
+        else:
+            paths = process_librispeech(Path(raw_data_dir), dataset_directory)
+
+        starmap_args = []
+        if args.is_numpy:
+            for set_name, scp in zip(("train", "dev", "test"), paths[1:]):
+                func_args = [
+                    dataset,
+                    set_name,
+                    scp,
+                    dataset_directory,
+                    feat_scp,
+                    len_scp,
+                    feat_type,
+                    sample_rate,
+                    win_t,
+                    hop_t,
+                    n_mels,
+                ]
+                starmap_args.append(tuple(func_args))
+            files_start_time = time.time()
+            with Pool(3) as p:
+                results = p.starmap(prepare_numpy, starmap_args)
+
+            print(
+                f"Processed {sum(results)} files in {time.time() - files_start_time} seconds."
+            )
+        else:
+            for scp in paths[1:]:
+                func_args = [
+                    args.dataset,
+                    str(scp),
+                    feat_ark,
+                    feat_scp,
+                    len_scp,
+                    fbank_conf,
+                    kaldi_root,
+                ]
+                starmap_args.append(tuple(func_args))
+            with Pool(3) as p:
+                p.starmap(prepare_kaldi, starmap_args)
+            print("Processing complete")
 
     # load model
-
+    if model_type == "fhvae":
+        model = FHVAE()
+    else:
+        model = SimpleFHVAE(z1_hus, z2_hus, z1_dim, z2_dim, x_hus)
     # set up experiment directory
 
     # run training
@@ -66,8 +122,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
+    parser.add_argument("--dataset", type=str, help="Dataset to use")
     parser.add_argument(
-        "--dataset", type=str, default="librispeech", help="Dataset to use"
+        "--raw_data_dir", type=str, default=None, help="Location of the raw data"
     )
     parser.add_argument(
         "--ftype",
@@ -113,11 +170,18 @@ if __name__ == "__main__":
         default=200,
         help="Number of steps to print statistics",
     )
+    parser.add_argument(
+        "--preprocessed",
+        action="store_true",
+        dest="is_preprocessed",
+        help="Use this flag if the data is already preprocessed",
+    )
     args = parser.parse_args()
     print(args)
 
     train_model(
         args.dataset,
+        args.raw_data_dir,
         args.ftype,
         args.data_format,
         args.model,
@@ -126,4 +190,5 @@ if __name__ == "__main__":
         args.n_patience,
         args.n_steps_per_epoch,
         args.n_print_steps,
+        args.is_preprocessed,
     )
