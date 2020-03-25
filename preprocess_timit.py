@@ -29,9 +29,9 @@ def process_timit(
 
     # convert sph to wav and dump scp
     wav_dir = output_dir / "wav"
-    train_scp = output_dir / "train/wav.scp"
-    dev_scp = output_dir / "dev/wav.scp"
-    test_scp = output_dir / "test/wav.scp"
+    train_scp, dev_scp, test_scp = [
+        output_dir / f"{se}/wav.scp" for se in ["train", "dev", "test"]
+    ]
 
     for file in (wav_dir, train_scp, dev_scp, test_scp):
         os.makedirs(file, exist_ok=True)
