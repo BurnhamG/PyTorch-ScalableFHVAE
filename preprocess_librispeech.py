@@ -1,10 +1,12 @@
 import os
 import argparse
 from typing import List, Tuple
+from pathlib import Path
+from utils import create_output_dir
 
 
 # dump wav scp
-def find_audios(dir: str) -> List[Tuple[str, str]]:
+def find_audios(dir: Path) -> List[Tuple[str, str]]:
     """Find .flac files in the given directory
 
     Args:
@@ -21,20 +23,21 @@ def find_audios(dir: str) -> List[Tuple[str, str]]:
     return sorted(uid_path, key=lambda x: x[0])
 
 
-def write_scp(root_dir: str, out_path: str, set_list: list) -> None:
+def write_scp(root_dir: Path, out_path: Path, set_list: list) -> None:
     """Writes uid and audio path to Kaldi .scp file"""
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, "w") as f:
         uid_path = []
-        for set in set_list:
-            uid_path += find_audios(f"{root_dir}/{set}")
+        for se in set_list:
+            uid_path += find_audios(root_dir / f"{se}")
         for uid, path in uid_path:
             f.write(f"{uid} {path}\n")
 
 
 def process_librispeech(
     raw_data_dir: str,
-    output_dir: str = "./datasets/librispeech",
+    feat_type: str = "fbank",
+    data_format: str = "numpy",
     train_list: list = None,
     dev_list: list = None,
     test_list: list = None,
@@ -43,7 +46,8 @@ def process_librispeech(
 
     Args:
         raw_data_dir: Base directory
-        output_dir:   Where .scp files should be saved
+        feat_type:    Type of feature that will be computed
+        data_format:  Format used for storing computed features
         train_list:   Training sets to process
         dev_list:     Development sets to process
         test_list:    Test sets to process
@@ -57,9 +61,11 @@ def process_librispeech(
     if test_list is None:
         test_list = ["test-clean", "dev-other"]
 
-    write_scp(raw_data_dir, f"{output_dir}/train/wav.scp", train_list)
-    write_scp(raw_data_dir, f"{output_dir}/dev/wav.scp", dev_list)
-    write_scp(raw_data_dir, f"{output_dir}/test/wav.scp", test_list)
+    root_dir = create_output_dir(raw_data_dir, data_format, feat_type)
+
+    write_scp(root_dir, root_dir / "train/wav.scp", train_list)
+    write_scp(root_dir, root_dir / "dev/wav.scp", dev_list)
+    write_scp(root_dir, root_dir / "test/wav.scp", test_list)
 
     print("generated wav scp")
 
@@ -79,10 +85,11 @@ if __name__ == "__main__":
         help="Feature type",
     )
     parser.add_argument(
-        "--out_dir",
+        "--data_format",
         type=str,
-        default="./datasets/librispeech",
-        help="Base output data directory",
+        default="numpy",
+        choices=["kaldi", "numpy"],
+        help="Format used to store data.",
     )
     parser.add_argument(
         "--train_list",
@@ -110,7 +117,8 @@ if __name__ == "__main__":
 
     process_librispeech(
         args.librispeech_dir,
-        args.out_dir,
+        args.ftype,
+        args.data_format,
         args.train_list,
         args.dev_list,
         args.test_list,

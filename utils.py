@@ -1,6 +1,19 @@
 import librosa
 import numpy as np
 from nptyping import Array
+from pathlib import Path
+
+
+def create_output_dir(root_dir: str, data_format: str, feat_type: str) -> Path:
+    if data_format.lower() == "numpy":
+        root_dir += "_np"
+    else:
+        root_dir += "_kd"
+
+    # Kaldi only computes fbank features
+    feat_type = "fbank" if data_format == "kaldi" else feat_type
+
+    return Path(root_dir + f"_{feat_type}")
 
 
 class AudioUtils:
