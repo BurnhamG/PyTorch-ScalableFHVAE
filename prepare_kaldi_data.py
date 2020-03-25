@@ -1,17 +1,18 @@
 import os
 import argparse
 import subprocess
+from typing import Tuple
+from pathlib import Path
 
 
 def prepare_kaldi(
-    dataset: str,
     wav_scp: str,
     feat_ark: str = None,
     feat_scp: str = None,
     len_scp: str = None,
     fbank_conf="./misc/fbank.conf",
     kaldi_root="./kaldi",
-) -> None:
+) -> Tuple[Path, Path, Path]:
     out_files = [feat_ark, feat_scp, len_scp]
     filenames = ("feats.ark", "feats.scp", "len.scp")
 
@@ -48,6 +49,7 @@ def prepare_kaldi(
             f"{cmd}: {error}" for (cmd, error) in zip(commands, exit_codes) if error > 0
         ]
         raise RuntimeError(f"Non-zero return code(s): {', '.join(error_info)}")
+    return Path(feat_ark), Path(feat_scp), Path(len_scp)
 
 
 if __name__ == "__main__":
@@ -63,13 +65,6 @@ if __name__ == "__main__":
     )
     parser.add_argument("len_scp", type=str, default=None, help="Output len.scp file")
     parser.add_argument(
-        "--dataset",
-        type=str,
-        default="librispeech",
-        choices=["librispeech", "timit"],
-        help="Dataset to use",
-    )
-    parser.add_argument(
         "--fbank_conf",
         type=str,
         default="./misc/fbank.conf",
@@ -82,7 +77,6 @@ if __name__ == "__main__":
     print(args)
 
     prepare_kaldi(
-        args.dataset,
         args.wav_scp,
         args.feat_ark,
         args.feat_scp,

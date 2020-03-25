@@ -6,6 +6,7 @@ import os
 import time
 import contextlib
 from multiprocessing import Pool
+from typing import Tuple, List
 from nptyping import Array
 from pathlib import Path
 
@@ -61,7 +62,7 @@ def prepare_numpy(
     win_t: float = 0.025,
     hop_t: float = 0.010,
     n_mels: int = 80,
-) -> int:
+) -> Tuple[int, List[Path]]:
     """Handles feature and script file generation and saving
 
     Args:
@@ -128,7 +129,7 @@ def prepare_numpy(
     print(
         f"Processed {count} files in {set_name} set over {time.time() - start_time} seconds."
     )
-    return count
+    return count, file_paths
 
 
 if __name__ == "__main__":
