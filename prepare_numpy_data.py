@@ -52,30 +52,30 @@ def generate_feat(
 def prepare_numpy(
     dataset: str,
     set_name: str,
+    wav_scp: str = None,
+    output_dir: str = None,
+    feat_scp: str = None,
+    len_scp: str = None,
     ftype: str = "fbank",
     sample_rate: int = None,
     win_t: float = 0.025,
     hop_t: float = 0.010,
     n_mels: int = 80,
-    output_dir: str = None,
-    wav_scp: str = None,
-    feat_scp: str = None,
-    len_scp: str = None,
 ) -> int:
     """Handles feature and script file generation and saving
 
     Args:
         dataset:     Name of the dataset for which features are generated
         set_name:    Name of the set (train, dev, test) to operate on
+        wav_scp: Input wav.scp file
+        output_dir:
+        feat_scp:
+        len_scp:
         ftype:       Type of computed feature
         sample_rate: Sample rate for resampling if not None
         win_t:       FFT window size in seconds
         hop_t:       Frame spacing in seconds
         n_mels:      Number of filter banks if using 'fbank' as the computed feature
-        output_dir:
-        wav_scp:
-        feat_scp:
-        len_scp:
 
     """
     opt_paths = (output_dir, wav_scp, feat_scp, len_scp)
@@ -183,15 +183,15 @@ if __name__ == "__main__":
     func_args = [
         args.dataset,
         args.set_name,
+        args.wav_scp,
+        args.np_dir,
+        args.feat_scp,
+        args.len_scp,
         args.ftype,
         args.sr,
         args.win_t,
         args.hop_t,
         args.n_mels,
-        args.np_dir,
-        args.wav_scp,
-        args.feat_scp,
-        args.len_scp,
     ]
     # Parallel run if set_name is unspecified
     if args.set_name is None:
