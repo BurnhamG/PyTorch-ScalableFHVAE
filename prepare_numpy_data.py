@@ -62,7 +62,7 @@ def prepare_numpy(
     win_t: float = 0.025,
     hop_t: float = 0.010,
     n_mels: int = 80,
-) -> Tuple[int, List[Path]]:
+) -> Tuple[int, Tuple[Path, Path, Path]]:
     """Handles feature and script file generation and saving
 
     Args:
@@ -129,7 +129,7 @@ def prepare_numpy(
     print(
         f"Processed {count} files in {set_name} set over {time.time() - start_time} seconds."
     )
-    return count, file_paths
+    return count, (wav_path, feat_path, len_path)
 
 
 if __name__ == "__main__":
