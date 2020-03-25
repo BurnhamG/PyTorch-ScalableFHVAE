@@ -3,21 +3,20 @@ import argparse
 from sphfile import SPHFile
 from pathlib import Path
 from utils import create_output_dir
+from typing import Tuple
 
 
 def process_timit(
-    root_dir: str,
-    feat_type: str = "fbank",
-    data_format: str = "numpy",
+    raw_data_dir: Path,
+    output_dir: Path,
     dev_spk_path: str = "./misc/timit_dev_spk.list",
     test_spk_path: str = "./misc/timit_test_spk.list",
-) -> None:
+) -> Tuple[Path, Path, Path]:
     """Generates .scp files for the TIMIT dataset
 
     Args:
-        root_dir:      Directory holding the dataset
-        feat_type:     Type of feature that will be computed
-        data_format:   Format used for storing computed features
+        raw_data_dir:      Directory holding the dataset
+        output_dir:
         dev_spk_path:  Path to a file containing all the speakers for the dev set
         test_spk_path: Path to a file containing all the speakers for the train set
 
@@ -28,22 +27,20 @@ def process_timit(
     with open(Path(test_spk_path)) as f:
         tt_spks = [line.rstrip().lower() for line in f]
 
-    output_dir = create_output_dir(root_dir, data_format, feat_type)
-
     # convert sph to wav and dump scp
-    wav_dir = Path(os.path.abspath(output_dir / "wav"))
-    tr_scp = output_dir / "train/wav.scp"
-    dt_scp = output_dir / "dev/wav.scp"
-    tt_scp = output_dir / "test/wav.scp"
+    wav_dir = output_dir / "wav"
+    train_scp = output_dir / "train/wav.scp"
+    dev_scp = output_dir / "dev/wav.scp"
+    test_scp = output_dir / "test/wav.scp"
 
-    for file in (wav_dir, tr_scp, dt_scp, tt_scp):
+    for file in (wav_dir, train_scp, dev_scp, test_scp):
         os.makedirs(file, exist_ok=True)
 
-    tr_f = open(tr_scp, "w")
-    dt_f = open(dt_scp, "w")
-    tt_f = open(tt_scp, "w")
+    tr_f = open(train_scp, "w")
+    dt_f = open(dev_scp, "w")
+    tt_f = open(test_scp, "w")
 
-    for root, _, fnames in sorted(os.walk(root_dir)):
+    for root, _, fnames in sorted(os.walk(raw_data_dir)):
         spk = root.split("/")[-1].lower()
         if spk in dt_spks:
             f = dt_f
@@ -68,26 +65,15 @@ def process_timit(
 
     print("Converted to wav and dumped .scp files")
 
+    return train_scp, dev_scp, test_scp
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("timit_dir", type=str, help="TIMIT raw data directory")
-    parser.add_argument(
-        "--ftype",
-        type=str,
-        default="fbank",
-        choices=["fbank", "spec"],
-        help="Feature type",
-    )
-    parser.add_argument(
-        "--data_format",
-        type=str,
-        default="numpy",
-        choices=["kaldi", "numpy"],
-        help="Format used to store data.",
-    )
+    parser.add_argument("raw_data_dir", type=str, help="TIMIT raw data directory")
+    parser.add_argument("output_dir", type=str, help="Directory for data output")
     parser.add_argument(
         "--dev_spk",
         type=str,
@@ -103,6 +89,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
 
-    process_timit(
-        args.timit_dir, args.ftype, args.data_format, args.dev_spk, args.test_spk
-    )
+    process_timit(args.raw_data_dir, args.output_dir, args.dev_spk, args.test_spk)

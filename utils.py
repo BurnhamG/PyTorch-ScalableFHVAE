@@ -4,16 +4,17 @@ from nptyping import Array
 from pathlib import Path
 
 
-def create_output_dir(root_dir: str, data_format: str, feat_type: str) -> Path:
+def create_output_dir(dataset: str, feat_type: str, data_format: str) -> Path:
+    """Concatenates the dataset name, format, and feature type to create a dir name"""
     if data_format.lower() == "numpy":
-        root_dir += "_np"
+        dataset += "_np"
     else:
-        root_dir += "_kd"
+        dataset += "_kd"
 
     # Kaldi only computes fbank features
     feat_type = "fbank" if data_format == "kaldi" else feat_type
 
-    return Path(root_dir + f"_{feat_type}")
+    return Path(dataset + f"_{feat_type}")
 
 
 class AudioUtils:

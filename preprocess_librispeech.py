@@ -35,19 +35,16 @@ def write_scp(root_dir: Path, out_path: Path, set_list: list) -> None:
 
 
 def process_librispeech(
-    raw_data_dir: str,
-    feat_type: str = "fbank",
-    data_format: str = "numpy",
+    raw_data_dir: Path,
+    output_dir: Path,
     train_list: list = None,
     dev_list: list = None,
     test_list: list = None,
-) -> None:
+) -> Tuple[Path, Path, Path]:
     """Generates .scp files for the Librispeech dataset
 
     Args:
         raw_data_dir: Base directory
-        feat_type:    Type of feature that will be computed
-        data_format:  Format used for storing computed features
         train_list:   Training sets to process
         dev_list:     Development sets to process
         test_list:    Test sets to process
@@ -61,42 +58,32 @@ def process_librispeech(
     if test_list is None:
         test_list = ["test-clean", "dev-other"]
 
-    root_dir = create_output_dir(raw_data_dir, data_format, feat_type)
+    train_scp, dev_scp, test_scp = [
+        raw_data_dir / f"{se}/wav.scp" for se in ["train", "dev", "test"]
+    ]
 
-    write_scp(root_dir, root_dir / "train/wav.scp", train_list)
-    write_scp(root_dir, root_dir / "dev/wav.scp", dev_list)
-    write_scp(root_dir, root_dir / "test/wav.scp", test_list)
+    for scp, set_list in zip(
+        [train_scp, dev_scp, test_scp], [train_list, dev_list, test_list]
+    ):
+        write_scp(raw_data_dir, scp, set_list)
 
-    print("generated wav scp")
+    print("Generated scp files")
+
+    return train_scp, dev_scp, test_scp
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument(
-        "librispeech_dir", type=str, help="LibriSpeech raw data directory"
-    )
-    parser.add_argument(
-        "--ftype",
-        type=str,
-        default="fbank",
-        choices=["fbank", "spec"],
-        help="Feature type",
-    )
-    parser.add_argument(
-        "--data_format",
-        type=str,
-        default="numpy",
-        choices=["kaldi", "numpy"],
-        help="Format used to store data.",
-    )
+    parser.add_argument("raw_data_dir", type=str, help="LibriSpeech raw data directory")
+    parser.add_argument("output_dir", type=str, help="Directory for data output")
     parser.add_argument(
         "--train_list",
         type=str,
         nargs="*",
         default=["train-clean-100"],
-        help="Train sets to include {train-clean-100, train-clean-360, train-other-500}",
+        help="Training sets to include {train-clean-100, train-clean-360, train-other-500}",
     )
     parser.add_argument(
         "--dev_list",
@@ -116,9 +103,8 @@ if __name__ == "__main__":
     print(args)
 
     process_librispeech(
-        args.librispeech_dir,
-        args.ftype,
-        args.data_format,
+        args.raw_data_dir,
+        args.output_dir,
         args.train_list,
         args.dev_list,
         args.test_list,
