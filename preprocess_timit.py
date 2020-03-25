@@ -1,7 +1,6 @@
 import os
 import argparse
 from sphfile import SPHFile
-from .utils import maybe_makedir
 
 
 def process_timit(
@@ -31,7 +30,7 @@ def process_timit(
     tt_scp = f"{output_dir}/test/wav.scp"
 
     for file in (wav_dir, tr_scp, dt_scp, tt_scp):
-        maybe_makedir(file)
+        os.makedirs(file, exist_ok=True)
 
     tr_f = open(tr_scp, "w")
     dt_f = open(dt_scp, "w")

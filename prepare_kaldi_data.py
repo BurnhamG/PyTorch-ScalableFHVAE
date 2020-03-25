@@ -1,7 +1,6 @@
 import os
 import argparse
 import subprocess
-from utils import maybe_makedir
 
 
 def prepare_kaldi(
@@ -14,7 +13,7 @@ def prepare_kaldi(
     kaldi_root="./kaldi",
 ) -> None:
     for p in [feat_ark, feat_scp, len_scp]:
-        maybe_makedir(os.path.dirname(p))
+        os.makedirs(os.path.dirname(p), exist_ok=True)
 
     feat_comp_cmd = [
         os.path.join(kaldi_root, "src/bin/compute-fbank-feats"),
