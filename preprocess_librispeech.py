@@ -76,34 +76,34 @@ if __name__ == "__main__":
         type=str,
         default="fbank",
         choices=["fbank", "spec"],
-        help="feature type",
+        help="Feature type",
     )
     parser.add_argument(
         "--out_dir",
         type=str,
         default="./datasets/librispeech",
-        help="output data directory",
+        help="Base output data directory",
     )
     parser.add_argument(
         "--train_list",
         type=str,
         nargs="*",
         default=["train-clean-100"],
-        help="train sets to include {train-clean-100, train-clean-360, train-other-500}",
+        help="Train sets to include {train-clean-100, train-clean-360, train-other-500}",
     )
     parser.add_argument(
         "--dev_list",
         type=str,
         nargs="*",
         default=["dev-clean", "dev-other"],
-        help="dev sets to include {dev-clean, dev-other}",
+        help="Dev sets to include {dev-clean, dev-other}",
     )
     parser.add_argument(
         "--test_list",
         type=str,
         nargs="*",
         default=["test-clean", "dev-other"],
-        help="test sets to include {test-clean, test-other}",
+        help="Test sets to include {test-clean, test-other}",
     )
     args = parser.parse_args()
     print(args)

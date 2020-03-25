@@ -52,7 +52,7 @@ if __name__ == "__main__":
         type=str,
         default="librispeech",
         choices=["librispeech", "timit"],
-        help="Input wav scp file",
+        help="Dataset to use",
     )
     parser.add_argument(
         "--fbank_conf",

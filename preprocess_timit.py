@@ -72,25 +72,25 @@ if __name__ == "__main__":
         type=str,
         default="fbank",
         choices=["fbank", "spec"],
-        help="feature type",
+        help="Feature type",
     )
     parser.add_argument(
         "--out_dir",
         type=str,
         default="./datasets/timit_np_fbank",
-        help="output data directory",
+        help="Output data directory",
     )
     parser.add_argument(
         "--dev_spk",
         type=str,
         default="./misc/timit_dev_spk.list",
-        help="path to list of dev set speakers",
+        help="Path to list of dev set speakers",
     )
     parser.add_argument(
         "--test_spk",
         type=str,
         default="./misc/timit_test_spk.list",
-        help="path to list of test set speakers",
+        help="Path to list of test set speakers",
     )
     args = parser.parse_args()
     print(args)

@@ -171,10 +171,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("wav_scp", type=str, help="input wav scp file")
-    parser.add_argument("np_dir", type=str, help="output directory for numpy matrices")
-    parser.add_argument("feat_scp", type=str, help="output feats.scp file")
-    parser.add_argument("len_scp", type=str, help="output len.scp file")
+    parser.add_argument("wav_scp", type=str, help="Input wav scp file")
+    parser.add_argument("np_dir", type=str, help="Output directory for numpy matrices")
+    parser.add_argument("feat_scp", type=str, help="Output feats.scp file")
+    parser.add_argument("len_scp", type=str, help="Output len.scp file")
     parser.add_argument(
         "--dataset",
         type=str,
@@ -187,25 +187,25 @@ if __name__ == "__main__":
         type=str,
         default="fbank",
         choices=["fbank", "spec"],
-        help="feature type to compute",
+        help="Feature type to compute",
     )
     parser.add_argument(
         "--sr",
         type=int,
         default=None,
-        help="resample raw audio to specified value if not None",
+        help="Resample raw audio to specified value if not None",
     )
     parser.add_argument(
-        "--win_t", type=float, default=0.025, help="window size in second"
+        "--win_t", type=float, default=0.025, help="Window size in seconds"
     )
     parser.add_argument(
-        "--hop_t", type=float, default=0.010, help="frame spacing in second"
+        "--hop_t", type=float, default=0.010, help="Frame spacing in seconds"
     )
     parser.add_argument(
         "--n_mels",
         type=int,
         default=80,
-        help="number of filter banks if choosing fbank",
+        help="Number of filter banks if choosing fbank",
     )
     args = parser.parse_args()
     print(args)
