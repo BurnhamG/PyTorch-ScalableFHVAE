@@ -4,11 +4,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.init import xavier_uniform_
 
-import costs
-
 
 class SimpleFHVAE(nn.Module):
-    def __init__(self):
+    def __init__(
+        self,
+        z1_hus=[128, 128],
+        z2_hus=[128, 128],
+        z1_dim=16,
+        z2_dim=16,
+        x_hus=[128, 128],
+    ):
         super().__init__()
 
         # priors
@@ -16,57 +21,15 @@ class SimpleFHVAE(nn.Module):
         self.pmu2 = [0.0, np.log(1.0 ** 2).astype(np.float32)]
 
         # encoder/decoder arch
-        self.z1_hus = [128, 128]
-        self.z2_hus = [128, 128]
-        self.z1_dim = 16
-        self.z2_dim = 16
-        self.x_hus = [128, 128]
+        self.z1_hus = z1_hus
+        self.z2_hus = z2_hus
+        self.z1_dim = z1_dim
+        self.z2_dim = z2_dim
+        self.x_hus = x_hus
         self.z1_pre_encoder = LatentSegPreEncoder(self.z1_hus)
         self.z2_pre_encoder = LatentSeqPreEncoder(self.z2_hus)
         self.gauss_layer = GaussianLayer()
         self.pre_decoder = PreDecoder(self.x_hus)
-
-    def __str__(self):
-        msg = ""
-        msg += "\nFactorized Hierarchical Variational Autoencoder:"
-        msg += "\n  Priors (mean/logvar):"
-        msg += "\n    pz1: %s" % str(self.pz1)
-        msg += "\n    pz2: %s" % str(self.pz2)
-        msg += "\n    pmu2: %s" % str(self.pmu2)
-        msg += "\n  Observed Variables:"
-        msg += "\n    xin: %s" % self.xin
-        msg += "\n    xout: %s" % self.xout
-        msg += "\n    mu_idx: %s" % self.mu_idx
-        msg += "\n    n: %s" % self.n
-        msg += "\n  Encoder/Decoder Architectures:"
-        msg += "\n    z1 encoder:"
-        msg += "\n      FC hidden units: %s" % str(self.z1_hus)
-        msg += "\n      latent dim: %s" % self.z1_dim
-        msg += "\n    z2 encoder:"
-        msg += "\n      FC hidden units: %s" % str(self.z2_hus)
-        msg += "\n      latent dim: %s" % self.z2_dim
-        msg += "\n    mu2 table size: %s" % self.num_seqs
-        msg += "\n    x decoder:"
-        msg += "\n      FC hidden units: %s" % str(self.x_hus)
-        msg += "\n  Outputs:"
-        msg += "\n    qz1_x: %s" % str(self.qz1_x)
-        msg += "\n    qz2_x: %s" % str(self.qz2_x)
-        msg += "\n    mu2: %s" % str(self.mu2)
-        msg += "\n    px_z: %s" % str(self.px_z)
-        msg += "\n    z1_sample: %s" % str(self.z1_sample)
-        msg += "\n    z2_sample: %s" % str(self.z2_sample)
-        msg += "\n    x_sample: %s" % str(self.x_sample)
-        msg += "\n  Losses:"
-        msg += "\n    lb: %s" % str(self.lb)
-        msg += "\n    log_px_z: %s" % str(self.log_px_z)
-        msg += "\n    neg_kld_z1: %s" % str(self.neg_kld_z1)
-        msg += "\n    neg_kld_z2: %s" % str(self.neg_kld_z2)
-        msg += "\n    log_pmu2: %s" % str(self.log_pmu2)
-        msg += "\n    log_qy: %s" % str(self.log_qy)
-        msg += "\n  Parameters:"
-        for name, param in self.state_dict().items():
-            msg += "\n    %s, %s" % (param.name, param.size())
-        return msg
 
     def mu2_lookup(mu_idx, z2_dim, num_seqs, init_std=1.0):
         """
@@ -118,10 +81,10 @@ class SimpleFHVAE(nn.Module):
         qz2_x = [z2_mu, z2_logvar]
 
         z1_pre_out = self.z1_pre_encoder(x, z2_sample)
-        z1_mu, z1_logvar, z1_sample = self.gauss_layer(z1_pre_out, self, z1_dim)
+        z1_mu, z1_logvar, z1_sample = self.gauss_layer(z1_pre_out, self.z1_dim)
         qz1_x = [z1_mu, z1_logvar]
 
-        x_pre_out = self.pre_decoder(z1_sample, z2_sample, self, z1_hus)
+        x_pre_out = self.pre_decoder(z1_sample, z2_sample, self. z1_hus)
         T, F = x.shape[1:]
         x_mu, x_logvar, x_sample = self.gauss_layer(x_pre_out, T * F)
         x_mu = torch.reshape(x_mu, (-1, T, F))
@@ -130,10 +93,8 @@ class SimpleFHVAE(nn.Module):
         px_z = [x_mu, x_logvar]
 
         # variational lower bound
-        log_pmu2 = torch.sum(log_gauss(mu2, self.pmu2[0], self.pmu2[1]), dim=1)
-        neg_kld_z2 = -1 * torch.sum(
-            self.kld(qz2_x[0], qz2_x[1], self.pz2[0], self.pz2[1]), dim=1
-        )
+        log_pmu2 = torch.sum(self.log_gauss(mu2, self.pmu2[0], self.pmu2[1]), dim=1)
+        neg_kld_z2 = -1 * torch.sum(self.kld(qz2_x[0], qz2_x[1], pz2[0], pz2[1]), dim=1)
         neg_kld_z1 = -1 * torch.sum(
             self.kld(qz1_x[0], qz1_x[1], self.pz1[0], self.pz1[1]), dim=1
         )
@@ -143,9 +104,9 @@ class SimpleFHVAE(nn.Module):
         # discriminative loss
         loss = nn.CrossEntropyLoss()
         logits = torch.unsqueeze(self.qz2_x[0], 1) - torch.unsqueeze(self.mu2_table, 0)
-        logits = -1 * torch.pow(logits, 2) / (2 * torch.exp(self.pz2[1]))
+        logits = -1 * torch.pow(logits, 2) / (2 * torch.exp(pz2[1]))
         logits = torch.sum(logits, dim=-1)
-        log_qy = loss(input=logits, target=target)
+        log_qy = loss(input=logits, target=mu_idx)
 
         return lower_bound, log_qy
 
@@ -227,7 +188,7 @@ class PreDecoder(nn.Module):
         super().__init__()
         self.hus = hus
 
-    def forward(self, lat_seg, let_seq):
+    def forward(self, lat_seg, lat_seq):
         out = torch.cat([lat_seg, lat_seq])
         for hu in self.hus:
             out = nn.Linear(np.prod(out.shape[1:]), hu)(out)
