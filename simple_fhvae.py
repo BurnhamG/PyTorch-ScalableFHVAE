@@ -65,12 +65,17 @@ class SimpleFHVAE(nn.Module):
         )
 
     def forward(self, x, mu_idx, num_seqs, num_segs):
-        """
+        """Forward pass through the network
+
         Args:
             x (torch.Tensor): Input data
             mu_idx (torch.Tensor): Int tensor of shape (bs,). Index for mu2_table
             num_seqs (int): Size of mu2 lookup table
             num_segs (int): Number of audio segments
+
+        Returns:
+            Variational lower bound and discriminative loss
+
         """
         mu2_table, mu2 = self.mu2_lookup(mu_idx, self.z2_dim, num_seqs)
         # z2 prior

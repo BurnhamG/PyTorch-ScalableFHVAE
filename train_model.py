@@ -33,6 +33,27 @@ def train_model(
     learning_rate: float = 0.001,
     beta1: float = 0.95,
     beta2: float = 0.999,
+    feat_scp=None,
+    len_scp=None,
+    sample_rate: int = None,
+    win_t=0.025,
+    hop_t=0.010,
+    n_mels=80,
+    feat_ark=None,
+    fbank_conf=None,
+    kaldi_root=None,
+    min_len=None,
+    mvn_path=None,
+    seg_len=20,
+    seg_shift=8,
+    rand_seg=False,
+    batch_size=256,
+    z1_hus=[128, 128],
+    z2_hus=[128, 128],
+    z1_dim=16,
+    z2_dim=16,
+    x_hus=[128, 128],
+    device="cuda",
 ):
     """Loads data and trains the model
 
@@ -54,6 +75,9 @@ def train_model(
         raise ValueError(
             "You must provide a raw data location if the data is not preprocessed!"
         )
+
+    if min_len is None:
+        min_len = seg_len
 
     data_sets = ("train", "dev", "test")
     # load data
@@ -145,7 +169,30 @@ def train_model(
     os.makedirs(exp_dir, exist_ok=True)
 
     # run training
-    optimizer = Adam(lr=learning_rate, betas=(beta1, beta2))
+    optimizer = Adam(model.parameters(), lr=learning_rate, betas=(beta1, beta2))
+
+    for epoch in range(n_epochs):
+        model.train()
+        train_loss = 0
+        for batch_idx, data in enumerate(audio_loader):
+            data = data.to(device)
+            optimizer.zero_grad()
+            lower_bound, discrim_loss = model(*data, len(audio_dataset))
+            loss = loss_function(lower_bound, discrim_loss, alpha_dis)
+            loss.backward()
+            train_loss += loss.item()
+            optimizer.step()
+            if batch_idx % args.log_interval == 0:
+                current_pos = batch_idx * len(data)
+                tot_len = len(audio_loader.dataset)
+                percentage = 100.0 * batch_idx / len(audio_loader)
+                cur_loss = loss.item() / len(data)
+                print(
+                    f"Train Epoch: {epoch} [{current_pos}/{tot_len} ({percentage:.0f}%)]\tLoss: {cur_loss:.6f}"
+                )
+        print(
+            f"====> Epoch: {epoch} Average loss: {train_loss / len(audio_loader.dataset):.4f}"
+        )
 
 
 # alpha/discriminative weight of 10 was found to produce best results
