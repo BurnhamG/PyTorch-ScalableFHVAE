@@ -16,6 +16,8 @@ from torch.optim import Adam
 from typing import Iterable
 from datasets import NumpyDataset, KaldiDataset
 from logger import VisdomLogger, TensorBoardLogger
+import shutil
+import numpy as np
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--dataset", type=str, help="Dataset to use")
@@ -216,6 +218,12 @@ parser.add_argument(
     type=str,
     help="Directory that will hold the model checkpoints",
 )
+parser.add_argument(
+    "--continue-from",
+    default="",
+    type=str,
+    help="Checkpoint model for continuing training",
+)
 args = parser.parse_args()
 print(args)
 
@@ -242,12 +250,28 @@ base_string = f"{args.dataset}_{args.data_format}_{args.feat_type}"
 exp_string = f"{args.model_type}_e{args.n_epochs}_s{args.steps_per_epoch}_p{args.n_patience}_a{args.alpha_dis}"
 run_id = f"{base_string}_{exp_string}"
 
+os.makedirs(args.checkpoint_dir, exist_ok=True)
+
 if args.visdom:
     visdom_logger = VisdomLogger(run_id, args.n_epochs)
 if args.tensorboard:
     tensorboard_logger = TensorBoardLogger(run_id, args.log_dir, args.log_params)
 
-os.makedirs(args.checkpoint_dir, exist_ok=True)
+if args.continue_from:
+    print(f"Loading {args.continue_from}.")
+    package = torch.load(args.continue_from)
+    model.load_state_dict(package['state_dict'])
+    if not args.finetune:
+        optim_state = package["optimizer"]
+        start_epoch = package["epoch"] + 1  # Saved epoch is last full epoch
+        values = package["values"]
+        validation_loss = package["val_loss"]
+        loss_results = values["loss_results"]
+        lower_bound_results = values["lower_bound_results"]
+        discrim_loss_results = values["discrim_loss_results"]
+        best_validation_lb = lower_bound_results[start_epoch]
+
+
 
 # Handle any extraneous arguments that may have been passed
 args.z1_hus = args.z1_hus[:2]
@@ -311,7 +335,7 @@ if not args.is_preprocessed:
             results = p.starmap(prepare_kaldi, starmap_args)
         print("Processing complete")
 
-dataset_args = [
+train_dataset_args = [
     paths_dict["train"]["feat_pth"],
     paths_dict["train"]["len_pth"],
     min_len,
@@ -320,17 +344,33 @@ dataset_args = [
     args.seg_shift,
     args.rand_seg,
 ]
+dev_dataset_args = [
+    paths_dict["dev"]["feat_pth"],
+    paths_dict["dev"]["len_pth"],
+    min_len,
+    args.mvn_path,
+    args.seg_len,
+    args.seg_shift,
+    args.rand_seg,
+]
 
 if args.data_format == "numpy":
-    audio_dataset = NumpyDataset(*dataset_args)
+    train_dataset = NumpyDataset(*train_dataset_args)
+    dev_dataset = NumpyDataset(*dev_dataset_args)
 else:
-    audio_dataset = KaldiDataset(*dataset_args)
-audio_loader = torch.utils.data.DataLoader(
-    audio_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4
+    train_dataset = KaldiDataset(*train_dataset_args)
+    dev_dataset = KaldiDataset(*dev_dataset_args)
+
+train_loader = torch.utils.data.DataLoader(
+    train_dataset, batch_size=args.training_batch_size, shuffle=True, num_workers=4
 )
+validation_loader = torch.utils.data.DataLoader(
+    dev_dataset, batch_size=args.dev_batch_size, shuffle=True, num_workers=4
+)
+
 # load model
 if args.model_type == "fhvae":
-    model = FHVAE()
+    model = FHVAE(args.z1_hus, args.z2_hus, args.z1_dim, args.z2_dim, args.x_hus)
 else:
     model = SimpleFHVAE(args.z1_hus, args.z2_hus, args.z1_dim, args.z2_dim, args.x_hus)
 
@@ -345,30 +385,59 @@ optimizer = Adam(
     model.parameters(), lr=args.learning_rate, betas=(args.beta1, args.beta2)
 )
 
+best_epoch, best_validation_lb = 0, -np.inf
 for epoch in range(args.n_epochs):
     # training
     model.train()
-    train_loss = 0
-    for batch_idx, data in enumerate(audio_loader):
-        data = data.to(args.device)
+    train_loss = 0.0
+    for batch_idx, data in enumerate(train_loader):
+        data = data.to(device)
         optimizer.zero_grad()
-        lower_bound, discrim_loss = model(*data, len(audio_dataset))
+        lower_bound, discrim_loss = model(*data, len(train_dataset))
         loss = loss_function(lower_bound, discrim_loss, args.alpha_dis)
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
         if batch_idx + 1 % args.log_interval == 0:
             current_pos = batch_idx * len(data)
-            tot_len = len(audio_loader.dataset)
-            percentage = 100.0 * batch_idx / len(audio_loader)
+            tot_len = len(train_loader.dataset)
+            percentage = 100.0 * batch_idx / len(train_loader)
             cur_loss = loss.item() / len(data)
 
             print(
-                f"Train Epoch: {epoch} [{current_pos}/{tot_len} ({percentage:.0f}%)]\tLoss: {cur_loss:.6f}"
+                f"====> Train Epoch: {epoch} [{current_pos}/{tot_len} ({percentage:.0f}%)]\tLoss: {cur_loss:.6f}"
             )
+    train_loss /= len(validation_loader.dataset)
+    print(f"====> Train set average loss: {train_loss:.4f}")
 
+    # eval
+    model.eval()
+    validation_loss = 0.0
+    with torch.no_grad():
+        for idx, data in enumerate(validation_loader):
+            data = data.to(device)
+            validation_lower_bound, validation_discrim_loss = model(
+                *data, len(validation_loader.dataset)
+            )
+            validation_loss += loss_function(
+                lower_bound, discrim_loss, args.alpha_dis
+            ).item()
+            if idx + 1 % args.log_interval == 0:
+                current_pos = batch_idx * len(data)
+                tot_len = len(train_loader.dataset)
+                percentage = 100.0 * batch_idx / len(train_loader)
+                cur_loss = loss.item() / len(data)
+
+                print(
+                    f"====> Validation Epoch: {epoch} [{current_pos}/{tot_len} ({percentage:.0f}%)]\tLoss: {cur_loss:.6f}"
+                )
+
+    validation_loss /= len(validation_loader.dataset)
+    print(f"====> Validation set loss: {validation_loss:.4f}")
+
+    lower_bound_results[epoch] = validation_lower_bound
+    discrim_loss_results[epoch] = validation_discrim_loss
     values = {
-        "loss_results": loss_results,
         "lower_bound_results": lower_bound_results,
         "discrim_loss_results": discrim_loss_results,
     }
@@ -379,38 +448,24 @@ for epoch in range(args.n_epochs):
 
     # Save model
     checkpoint = {
-        "epoch": epoch + 1,
+        "epoch": epoch,
         "state_dict": model.state_dict(),
         "optimizer": optimizer.state_dict(),
-        "loss": loss,
+        "args": args,
+        "values": values,
     }
+
+    if validation_lower_bound > best_validation_lb:
+        is_best = True
+
     save_ckp(checkpoint, is_best, args.checkpoint_dir, model_dir)
 
     print(
-        f"====> Epoch: {epoch} Average loss: {train_loss / len(audio_loader.dataset):.4f}"
+        f"====> Epoch: {epoch} Average loss: {train_loss / len(train_loader.dataset):.4f}"
     )
 
-    # eval
-    model.eval()
-    test_loss = 0
-    with torch.no_grad():
-        for i, (data, _) in enumerate(dev_loader):
-            data = data.to(device)
-            recon_batch, mu, logvar = model(data)
-            test_loss += loss_function(lower_bound, discrim_loss, args.alpha_dis).item()
-            if i == 0:
-                n = min(data.size(0), 8)
-                comparison = torch.cat(
-                    [data[:n], recon_batch.view(args.batch_size, 1, 28, 28)[:n]]
-                )
-                save_image(
-                    comparison.cpu(),
-                    "results/reconstruction_" + str(epoch) + ".png",
-                    nrow=n,
-                )
-
-    test_loss /= len(dev_loader.dataset)
-    print("====> Test set loss: {:.4f}".format(test_loss))
+    if check_terminate(epoch, best_epoch, args.n_patience, args.n_epochs):
+        print("Training terminated!")
 
 
 # alpha/discriminative weight of 10 was found to produce best results
@@ -424,12 +479,17 @@ def loss_function(lower_bound, log_qy, alpha=10.0):
     return -1 * torch.mean(lower_bound + alpha * log_qy)
 
 
-import shutil
-
-
 def save_ckp(state, is_best, checkpoint_dir, best_model_dir):
     f_path = checkpoint_dir / "checkpoint.pt"
     torch.save(state, f_path)
     if is_best:
         best_fpath = best_model_dir / "best_model.pt"
         shutil.copyfile(f_path, best_fpath)
+
+
+def check_terminate(epoch, best_epoch, n_patience, n_epochs):
+    if (epoch - 1) - best_epoch > n_patience:
+        return True
+    if epoch > n_epochs:
+        return True
+    return False
