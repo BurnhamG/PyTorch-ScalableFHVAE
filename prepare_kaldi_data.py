@@ -10,9 +10,23 @@ def prepare_kaldi(
     feat_ark: str = None,
     feat_scp: str = None,
     len_scp: str = None,
-    fbank_conf="./misc/fbank.conf",
-    kaldi_root="./kaldi",
+    fbank_conf: str = "./misc/fbank.conf",
+    kaldi_root: str = "./kaldi",
 ) -> Tuple[Path, Path, Path]:
+    """Handles Kaldi format feature and script file generation and saving
+
+    If any of feat_ark, feat_scp, or len_scp are None, they will be saved to the
+        same directory as the wav_scp file that is provided
+
+    Args:
+        wav_scp:    Input wav.scp file
+        feat_ark:   Location to save the feats.ark file
+        feat_scp:   Location to save the feats.scp file
+        len_scp:    Location to save the len.scp file
+        fbank_conf: Location of the fbank.conf file for Kaldi to use in feature computation
+        kaldi_root: Kaldi root directory
+
+    """
     out_files = [feat_ark, feat_scp, len_scp]
     filenames = ("feats.ark", "feats.scp", "len.scp")
 

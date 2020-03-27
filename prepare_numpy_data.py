@@ -63,15 +63,18 @@ def prepare_numpy(
     hop_t: float = 0.010,
     n_mels: int = 80,
 ) -> Tuple[int, Tuple[Path, Path, Path]]:
-    """Handles feature and script file generation and saving
+    """Handles Numpy format feature and script file generation and saving
+
+    If wav.scp does not exist, an error will be raised.
+    If feat_scp and/or len_scp are None, they will be saved to the set_name folder.
 
     Args:
         dataset:     Name of the dataset for which features are generated
         set_name:    Name of the set (train, dev, test) to operate on
-        wav_scp: Input wav.scp file
-        output_dir:
-        feat_scp:
-        len_scp:
+        wav_scp:     Input wav.scp file
+        output_dir:  Directory to write to
+        feat_scp:    Location to save the feats.scp file
+        len_scp:     Location to save the len.scp file
         ftype:       Type of computed feature
         sample_rate: Sample rate for resampling if not None
         win_t:       FFT window size in seconds
