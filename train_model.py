@@ -1,6 +1,5 @@
 import sys
 import argparse
-import logging
 import os
 import torch
 from preprocess_timit import process_timit
@@ -40,10 +39,11 @@ parser.add_argument(
     help="Format used to store data.",
 )
 parser.add_argument(
-    "--model",
+    "--model-type",
     type=str,
     default="fhvae",
-    help="Model architecture; {fhvae|simple_fhvae}",
+    choices=["fhvae", "simple_fhvae"],
+    help="Model architecture",
 )
 parser.add_argument(
     "--alpha-dis", type=float, default=10.0, help="Discriminative objective weight"
@@ -68,6 +68,12 @@ parser.add_argument(
     type=int,
     default=200,
     help="Number of steps to print statistics",
+)
+parser.add_argument(
+    "--n-checkpoint-steps",
+    type=int,
+    default=200,
+    help="Number of steps to save checkpoints",
 )
 parser.add_argument(
     "--preprocessed",
@@ -189,9 +195,7 @@ parser.add_argument(
     "--device", type=str, default="gpu", help="Device to use for computations"
 )
 parser.add_argument(
-    "--log-interval",
-    type=int,
-    help="Step interval for printing information and saving checkpoints",
+    "--log-interval", type=int, help="Step interval for saving checkpoints",
 )
 parser.add_argument(
     "--tensorboard",
@@ -238,7 +242,8 @@ print(args)
 def loss_function(lower_bound, log_qy, alpha=10.0):
     """Discriminative segment variational lower bound
 
-    Segment variational lower bound plus the (weighted) discriminative objective
+    Returns:
+        Segment variational lower bound plus the (weighted) discriminative objective.
 
     """
 
@@ -247,14 +252,16 @@ def loss_function(lower_bound, log_qy, alpha=10.0):
 
 def save_ckp(
     state,
-    model,
+    model_type: str,
     run_info: str,
-    epoch,
-    iteration,
-    is_best,
-    checkpoint_dir,
-    best_model_path,
+    epoch: int,
+    iteration: int,
+    is_best: bool,
+    checkpoint_dir: str,
+    best_model_path: str,
 ):
+    """Saves checkpoint files"""
+
     f_path = Path(checkpoint_dir) / f"{model}_{run_info}_e{epoch}_i{iteration}.tar"
     torch.save(state, f_path)
     if is_best:
@@ -262,6 +269,8 @@ def save_ckp(
 
 
 def check_terminate(epoch, best_epoch, n_patience, n_epochs):
+    """Checks if training should be terminated"""
+
     if (epoch - 1) - best_epoch > n_patience:
         return True
     if epoch > n_epochs:
@@ -299,16 +308,22 @@ if args.visdom:
 if args.tensorboard:
     tensorboard_logger = TensorBoardLogger(run_id, args.log_dir, args.log_params)
 
+# Load a previously saved checkpoint
 if args.continue_from:
     print(f"Loading {args.continue_from}.")
     strict_mode = True
     package = torch.load(args.continue_from)
-    model = package["args"].get("model_type")
-    if model is None:
+    model_type = package.get("model_type")
+    model_params = package["model_params"]
+    if model_type == "fhvae":
+        model = FHVAE(*model_params)
+    elif model_type == "simple_fhvae":
+        model = SimpleFHVAE(*model_params)
+    else:
+        # Fallback just in case
         model = args.model_type
         strict_mode = False
     model.load_state_dict(package["state_dict"], strict=False)
-    # Fallback just in case
     if not args.finetune:
         optim_state = package["optimizer"]
         start_epoch = package["epoch"] + 1  # Saved epoch is last full epoch
@@ -506,6 +521,15 @@ for epoch in range(args.n_epochs):
         "optimizer": optimizer.state_dict(),
         "args": args,
         "best_val_lb": best_val_lb,
+        "model_type": args.model_type,
+        "model_params": (
+            model.z1_hus,
+            model.z2_hus,
+            model.z1_dim,
+            model.z2_dim,
+            model.x_hus,
+        ),
+        "summary_vals": summary_list,
     }
 
     save_ckp(
