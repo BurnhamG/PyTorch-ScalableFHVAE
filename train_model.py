@@ -15,11 +15,12 @@ from fhvae import FHVAE
 from torch.optim import Adam
 from typing import Iterable
 from datasets import NumpyDataset, KaldiDataset
+from logger import VisdomLogger, TensorBoardLogger
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--dataset", type=str, help="Dataset to use")
 parser.add_argument(
-    "--raw_data_dir", type=str, default=None, help="Location of the raw data"
+    "--raw-data-dir", type=str, default=None, help="Location of the raw data"
 )
 parser.add_argument(
     "--ftype",
@@ -29,7 +30,7 @@ parser.add_argument(
     help="Feature type to compute (only affects numpy data)",
 )
 parser.add_argument(
-    "--data_format",
+    "--data-format",
     type=str,
     default="numpy",
     choices=["kaldi", "numpy"],
@@ -42,25 +43,25 @@ parser.add_argument(
     help="Model architecture; {fhvae|simple_fhvae}",
 )
 parser.add_argument(
-    "--alpha_dis", type=float, default=10.0, help="Discriminative objective weight"
+    "--alpha-dis", type=float, default=10.0, help="Discriminative objective weight"
 )
 parser.add_argument(
-    "--n_epochs", type=int, default=100, help="Number of maximum training epochs"
+    "--n-epochs", type=int, default=100, help="Number of maximum training epochs"
 )
 parser.add_argument(
-    "--n_patience",
+    "--n-patience",
     type=int,
     default=10,
     help="Number of maximum consecutive non-improving epochs",
 )
 parser.add_argument(
-    "--n_steps_per_epoch",
+    "--n-steps-per-epoch",
     type=int,
     default=5000,
     help="Number of training steps per epoch",
 )
 parser.add_argument(
-    "--n_print_steps",
+    "--n-print-steps",
     type=int,
     default=200,
     help="Number of steps to print statistics",
@@ -72,164 +73,152 @@ parser.add_argument(
     help="Use this flag if the data is already preprocessed",
 )
 parser.add_argument(
-    "--learning_rate", type=float, default=0.001, help="Learning rate for training"
+    "--learning-rate", type=float, default=0.001, help="Learning rate for training"
 )
 parser.add_argument(
-    "--beta_one", type=float, default=0.95, help="Beta1 for the Adam optimizer"
+    "--beta-one", type=float, default=0.95, help="Beta1 for the Adam optimizer"
 )
 parser.add_argument(
-    "--beta_two", type=float, default=0.999, help="Beta2 for the Adam optimizer"
+    "--beta-two", type=float, default=0.999, help="Beta2 for the Adam optimizer"
 )
 parser.add_argument(
-    "--feature_scp", type=str, default=None, help="Path to the feature scp file"
+    "--feature-scp", type=str, default=None, help="Path to the feature scp file"
 )
 parser.add_argument(
-    "--length_scp", type=str, default=None, help="Path to the length scp file"
+    "--length-scp", type=str, default=None, help="Path to the length scp file"
 )
 parser.add_argument(
-    "--sample_rate",
+    "--sample-rate",
     type=int,
     default=None,
     help="Sample rate to use for resampling audio samples",
 )
-parser.add_argument("--win_t", type=float, default=0.025)
-parser.add_argument("--hop_t", type=float, default=0.010)
-parser.add_argument("--n_mels", type=int, default=80)
 parser.add_argument(
-    "--feat_ark",
+    "--win-size",
+    type=float,
+    default=0.025,
+    help="Window size for spectrogram in seconds",
+)
+parser.add_argument(
+    "--hop-size",
+    type=float,
+    default=0.010,
+    help="Window stride for spectrogram in seconds",
+)
+parser.add_argument("--n-mels", type=int, default=80, help="Number of filter banks")
+parser.add_argument(
+    "--feat-ark",
     type=str,
     default=None,
     help="Path to the preprocessed Kaldi .ark file",
 )
 parser.add_argument(
-    "--fbank_conf",
+    "--fbank-conf",
     type=str,
     default=None,
     help="Path to the fbank.conf file kaldi should use",
 )
 parser.add_argument(
-    "--kaldi_root", type=str, default=None, help="Root directory for Kaldi"
+    "--kaldi-root", type=str, default=None, help="Root directory for Kaldi"
 )
 parser.add_argument(
-    "--min_len",
+    "--min-len",
     type=int,
     default=None,
     help="Minimum segment length. If none is provided this will use the sequence length",
 )
 parser.add_argument(
-    "--mvn_path",
+    "--mvn-path",
     type=str,
     default=None,
     help="Path to a precomputed mean and variance normalization file",
 )
-parser.add_argument("--seg_len", type=int, default=20, help="Segment length to use")
+parser.add_argument("--seg-len", type=int, default=20, help="Segment length to use")
 parser.add_argument(
-    "--seg_shift",
+    "--seg-shift",
     type=int,
     default=8,
     help="Segment shift if rand_seg is False, otherwise floor(seq_len/seg_shift) segments per sequence will be extracted",
 )
 parser.add_argument(
-    "--rand_seg",
+    "--rand-seg",
     type=bool,
     default=False,
     help="If True, segments will be randomly extracted",
 )
 parser.add_argument(
-    "--training_batch_size",
+    "--training-batch-size",
     type=int,
     default=256,
     help="Batch size to use for training",
 )
 parser.add_argument(
-    "--dev_batch_size",
+    "--dev-batch-size",
     type=int,
     default=256,
     help="Batch size to use for evaluation against the development set",
 )
 parser.add_argument(
-    "--z1_hus",
-    type=list,
+    "--z1-hus",
     default=[128, 128],
-    help="List of the number of hideen units for the layers of z1",
+    nargs=2,
+    help="List of the number of hideen units for the two layers of z1",
 )
 parser.add_argument(
-    "--z2_hus",
-    type=list,
+    "--z2-hus",
     default=[128, 128],
-    help="List of the number of hideen units for the layers of z2",
+    nargs=2,
+    help="List of the number of hideen units for the two layers of z2",
 )
 parser.add_argument(
-    "--z1_dim", type=int, default=16, help="Dimensionality of the z1 layer"
+    "--z1-dim", type=int, default=16, help="Dimensionality of the z1 layer"
 )
 parser.add_argument(
-    "--z2_dim", type=int, default=16, help="Dimensionality of the z2 layer"
+    "--z2-dim", type=int, default=16, help="Dimensionality of the z2 layer"
 )
 parser.add_argument(
-    "--x_hus",
-    type=list,
+    "--x-hus",
     default=[128, 128],
+    nargs=2,
     help="List of hidden units per layer for the pre-stochastic layer decoder",
 )
 parser.add_argument(
-    "--device", type=str, default="cuda", help="Device to use for computations"
+    "--device", type=str, default="gpu", help="Device to use for computations"
+)
+parser.add_argument(
+    "--log-interval",
+    type=int,
+    help="Step interval for printing information and saving checkpoints",
+)
+parser.add_argument(
+    "--tensorboard",
+    action="store_true",
+    dest="tensorboard",
+    help="Enable Tensorboard logging",
+)
+parser.add_argument(
+    "--visdom", action="store_true", dest="visdom", help="Enable Visdom logging"
+)
+parser.add_argument(
+    "--log-dir",
+    default="visualize/deepspeech_final",
+    help="Location of tensorboard log",
+)
+parser.add_argument(
+    "--log-params",
+    dest="log_params",
+    action="store_true",
+    help="Log parameter values and gradients",
+)
+parser.add_argument(
+    "--checkpoint-dir",
+    default="./checkpoints",
+    type=str,
+    help="Directory that will hold the model checkpoints",
 )
 args = parser.parse_args()
 print(args)
 
-# def train_model(
-#     dataset: str,
-#     raw_data_dir: str,
-#     feat_type: str = "fbank",
-#     data_format: str = "numpy",
-#     model_type: str = "fhvae",
-#     alpha_dis: float = 10.0,
-#     n_epochs: int = 100,
-#     n_patience: int = 10,
-#     steps_per_epoch: int = 5000,
-#     print_steps: int = 200,
-#     is_preprocessed: bool = True,
-#     learning_rate: float = 0.001,
-#     beta1: float = 0.95,
-#     beta2: float = 0.999,
-#     feat_scp=None,
-#     len_scp=None,
-#     sample_rate: int = None,
-#     win_t=0.025,
-#     hop_t=0.010,
-#     n_mels=80,
-#     feat_ark=None,
-#     fbank_conf=None,
-#     kaldi_root=None,
-#     min_len=None,
-#     mvn_path=None,
-#     seg_len=20,
-#     seg_shift=8,
-#     rand_seg=False,
-#     batch_size=256,
-#     z1_hus=[128, 128],
-#     z2_hus=[128, 128],
-#     z1_dim=16,
-#     z2_dim=16,
-#     x_hus=[128, 128],
-#     device="cuda",
-# ):
-"""Loads data and trains the model
-
-Args:
-    dataset:         The dataset to use for training
-    raw_data_dir:
-    feat_type:       Type of feature to compute (only affects numpy data format)
-    data_format:     How the computed features should be stored
-    model_type:      Type of model to use for training
-    alpha_dis:       Discriminative objective weight
-    n_epochs:        Maximum number of training epochs
-    n_patience:      Maximum number of consecutive epochs without improvement
-    steps_per_epoch: Training steps per epoch
-    print_steps:     Interval for printing statistics
-    is_preprocessed:
-
-"""
 if args.raw_data_dir is None and args.is_preprocessed is False:
     raise ValueError(
         "You must provide a raw data location if the data is not preprocessed!"
@@ -237,6 +226,33 @@ if args.raw_data_dir is None and args.is_preprocessed is False:
 
 if args.min_len is None:
     min_len = args.seg_len
+
+if args.device == "gpu":
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+else:
+    device = torch.device("cpu")
+
+loss_results, lower_bound_results, discrim_loss_results = (
+    torch.Tensor(args.n_epochs),
+    torch.Tensor(args.n_epochs),
+    torch.Tensor(args.n_epochs),
+)
+
+base_string = f"{args.dataset}_{args.data_format}_{args.feat_type}"
+exp_string = f"{args.model_type}_e{args.n_epochs}_s{args.steps_per_epoch}_p{args.n_patience}_a{args.alpha_dis}"
+run_id = f"{base_string}_{exp_string}"
+
+if args.visdom:
+    visdom_logger = VisdomLogger(run_id, args.n_epochs)
+if args.tensorboard:
+    tensorboard_logger = TensorBoardLogger(run_id, args.log_dir, args.log_params)
+
+os.makedirs(args.checkpoint_dir, exist_ok=True)
+
+# Handle any extraneous arguments that may have been passed
+args.z1_hus = args.z1_hus[:2]
+args.z2_hus = args.z2_hus[:2]
+args.x_hus = args.x_hus[:2]
 
 data_sets = ("train", "dev", "test")
 # load data
@@ -261,8 +277,8 @@ if not args.is_preprocessed:
                 args.len_scp,
                 args.feat_type,
                 args.sample_rate,
-                args.win_t,
-                args.hop_t,
+                args.win_size,
+                args.hop_size,
                 args.n_mels,
             ]
             starmap_args.append(tuple(func_args))
@@ -317,12 +333,11 @@ if args.model_type == "fhvae":
     model = FHVAE()
 else:
     model = SimpleFHVAE(args.z1_hus, args.z2_hus, args.z1_dim, args.z2_dim, args.x_hus)
+
+model.to(device)
 # set up experiment directory
-exp_root = Path("./experiments") / args.dataset
-exp_dir = (
-    exp_root
-    / f"{args.model_type}_e{args.n_epochs}_s{args.steps_per_epoch}_p{args.n_patience}_a{args.alpha_dis}"
-)
+exp_root = Path("./experiments") / base_string
+exp_dir = exp_root / exp_string
 os.makedirs(exp_dir, exist_ok=True)
 
 # run training
@@ -331,27 +346,71 @@ optimizer = Adam(
 )
 
 for epoch in range(args.n_epochs):
+    # training
     model.train()
     train_loss = 0
     for batch_idx, data in enumerate(audio_loader):
         data = data.to(args.device)
         optimizer.zero_grad()
         lower_bound, discrim_loss = model(*data, len(audio_dataset))
-        loss = args.loss_function(lower_bound, discrim_loss, args.alpha_dis)
+        loss = loss_function(lower_bound, discrim_loss, args.alpha_dis)
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
-        if batch_idx % args.log_interval == 0:
+        if batch_idx + 1 % args.log_interval == 0:
             current_pos = batch_idx * len(data)
             tot_len = len(audio_loader.dataset)
             percentage = 100.0 * batch_idx / len(audio_loader)
             cur_loss = loss.item() / len(data)
+
             print(
                 f"Train Epoch: {epoch} [{current_pos}/{tot_len} ({percentage:.0f}%)]\tLoss: {cur_loss:.6f}"
             )
+
+    values = {
+        "loss_results": loss_results,
+        "lower_bound_results": lower_bound_results,
+        "discrim_loss_results": discrim_loss_results,
+    }
+    if args.tensorboard:
+        tensorboard_logger.update(epoch, values, model.named_parameters())
+    if args.visdom:
+        visdom_logger.update(epoch, values)
+
+    # Save model
+    checkpoint = {
+        "epoch": epoch + 1,
+        "state_dict": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "loss": loss,
+    }
+    save_ckp(checkpoint, is_best, args.checkpoint_dir, model_dir)
+
     print(
         f"====> Epoch: {epoch} Average loss: {train_loss / len(audio_loader.dataset):.4f}"
     )
+
+    # eval
+    model.eval()
+    test_loss = 0
+    with torch.no_grad():
+        for i, (data, _) in enumerate(dev_loader):
+            data = data.to(device)
+            recon_batch, mu, logvar = model(data)
+            test_loss += loss_function(lower_bound, discrim_loss, args.alpha_dis).item()
+            if i == 0:
+                n = min(data.size(0), 8)
+                comparison = torch.cat(
+                    [data[:n], recon_batch.view(args.batch_size, 1, 28, 28)[:n]]
+                )
+                save_image(
+                    comparison.cpu(),
+                    "results/reconstruction_" + str(epoch) + ".png",
+                    nrow=n,
+                )
+
+    test_loss /= len(dev_loader.dataset)
+    print("====> Test set loss: {:.4f}".format(test_loss))
 
 
 # alpha/discriminative weight of 10 was found to produce best results
@@ -363,3 +422,14 @@ def loss_function(lower_bound, log_qy, alpha=10.0):
     """
 
     return -1 * torch.mean(lower_bound + alpha * log_qy)
+
+
+import shutil
+
+
+def save_ckp(state, is_best, checkpoint_dir, best_model_dir):
+    f_path = checkpoint_dir / "checkpoint.pt"
+    torch.save(state, f_path)
+    if is_best:
+        best_fpath = best_model_dir / "best_model.pt"
+        shutil.copyfile(f_path, best_fpath)
