@@ -1,3 +1,4 @@
+import sys
 import argparse
 import logging
 import os
@@ -214,7 +215,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--checkpoint-dir",
-    default="./checkpoints",
+    default="./models",
     type=str,
     help="Directory that will hold the model checkpoints",
 )
@@ -224,8 +225,49 @@ parser.add_argument(
     type=str,
     help="Checkpoint model for continuing training",
 )
+parser.add_argument(
+    "--best-model-dir",
+    default="./models/best_model.pth",
+    help="Location to save the best epoch models",
+)
 args = parser.parse_args()
 print(args)
+
+
+# alpha/discriminative weight of 10 was found to produce best results
+def loss_function(lower_bound, log_qy, alpha=10.0):
+    """Discriminative segment variational lower bound
+
+    Segment variational lower bound plus the (weighted) discriminative objective
+
+    """
+
+    return -1 * torch.mean(lower_bound + alpha * log_qy)
+
+
+def save_ckp(
+    state,
+    model,
+    run_info: str,
+    epoch,
+    iteration,
+    is_best,
+    checkpoint_dir,
+    best_model_path,
+):
+    f_path = Path(checkpoint_dir) / f"{model}_{run_info}_e{epoch}_i{iteration}.tar"
+    torch.save(state, f_path)
+    if is_best:
+        shutil.copyfile(f_path, Path(best_model_path))
+
+
+def check_terminate(epoch, best_epoch, n_patience, n_epochs):
+    if (epoch - 1) - best_epoch > n_patience:
+        return True
+    if epoch > n_epochs:
+        return True
+    return False
+
 
 if args.raw_data_dir is None and args.is_preprocessed is False:
     raise ValueError(
@@ -259,18 +301,22 @@ if args.tensorboard:
 
 if args.continue_from:
     print(f"Loading {args.continue_from}.")
+    strict_mode = True
     package = torch.load(args.continue_from)
-    model.load_state_dict(package['state_dict'])
+    model = package["args"].get("model_type")
+    if model is None:
+        model = args.model_type
+        strict_mode = False
+    model.load_state_dict(package["state_dict"], strict=False)
+    # Fallback just in case
     if not args.finetune:
         optim_state = package["optimizer"]
         start_epoch = package["epoch"] + 1  # Saved epoch is last full epoch
         values = package["values"]
-        validation_loss = package["val_loss"]
-        loss_results = values["loss_results"]
+        val_loss = package["val_loss"]
         lower_bound_results = values["lower_bound_results"]
         discrim_loss_results = values["discrim_loss_results"]
-        best_validation_lb = lower_bound_results[start_epoch]
-
+        best_val_lb = lower_bound_results[start_epoch]
 
 
 # Handle any extraneous arguments that may have been passed
@@ -364,7 +410,7 @@ else:
 train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=args.training_batch_size, shuffle=True, num_workers=4
 )
-validation_loader = torch.utils.data.DataLoader(
+val_loader = torch.utils.data.DataLoader(
     dev_dataset, batch_size=args.dev_batch_size, shuffle=True, num_workers=4
 )
 
@@ -385,7 +431,7 @@ optimizer = Adam(
     model.parameters(), lr=args.learning_rate, betas=(args.beta1, args.beta2)
 )
 
-best_epoch, best_validation_lb = 0, -np.inf
+best_epoch, best_val_lb = 0, -np.inf
 for epoch in range(args.n_epochs):
     # training
     model.train()
@@ -408,14 +454,19 @@ for epoch in range(args.n_epochs):
             print(
                 f"====> Train Epoch: {epoch} [{current_pos}/{tot_len} ({percentage:.0f}%)]\tLoss: {cur_loss:.6f}"
             )
-    train_loss /= len(validation_loader.dataset)
+            if np.isnan(lower_bound):
+                print("Training diverged")
+                raise sys.exit(2)
+
+    train_loss /= len(val_loader.dataset)
     print(f"====> Train set average loss: {train_loss:.4f}")
 
     # eval
     model.eval()
-    validation_loss = 0.0
+    val_loss = 0.0
+    summary_list = [0, 0, 0, 0, 0, 0]
     with torch.no_grad():
-        for idx, data in enumerate(validation_loader):
+        for idx, data in enumerate(val_loader):
             data = data.to(device)
             val_lower_bound, _, val_summ_vars = model(*data, len(val_loader.dataset))
             val_loss += loss_function(lower_bound, discrim_loss, args.alpha_dis).item()
@@ -432,11 +483,10 @@ for epoch in range(args.n_epochs):
                     f"====> Validation Epoch: {epoch} [{current_pos}/{tot_len} ({percentage:.0f}%)]\tLoss: {cur_loss:.6f}"
                 )
 
-    validation_loss /= len(validation_loader.dataset)
-    print(f"====> Validation set loss: {validation_loss:.4f}")
+    val_loss /= len(val_loader.dataset)
+    print(f"====> Validation set loss: {val_loss:.4f}")
 
-    lower_bound_results[epoch] = validation_lower_bound
-    discrim_loss_results[epoch] = validation_discrim_loss
+    lower_bound_results[epoch] = val_lower_bound
     values = {
         "lower_bound_results": lower_bound_results,
         "discrim_loss_results": discrim_loss_results,
@@ -446,19 +496,28 @@ for epoch in range(args.n_epochs):
     if args.visdom:
         visdom_logger.update(epoch, values)
 
+    if val_lower_bound > best_val_lb:
+        is_best = True
+
     # Save model
     checkpoint = {
         "epoch": epoch,
         "state_dict": model.state_dict(),
         "optimizer": optimizer.state_dict(),
         "args": args,
-        "values": values,
+        "best_val_lb": best_val_lb,
     }
 
-    if validation_lower_bound > best_validation_lb:
-        is_best = True
-
-    save_ckp(checkpoint, is_best, args.checkpoint_dir, model_dir)
+    save_ckp(
+        checkpoint,
+        args.model_type,
+        base_string,
+        epoch,
+        len(val_loader.dataset),
+        is_best,
+        args.checkpoint_dir,
+        args.model_dir,
+    )
 
     print(
         f"====> Epoch: {epoch} Average loss: {train_loss / len(train_loader.dataset):.4f}"
@@ -466,30 +525,4 @@ for epoch in range(args.n_epochs):
 
     if check_terminate(epoch, best_epoch, args.n_patience, args.n_epochs):
         print("Training terminated!")
-
-
-# alpha/discriminative weight of 10 was found to produce best results
-def loss_function(lower_bound, log_qy, alpha=10.0):
-    """Discriminative segment variational lower bound
-
-    Segment variational lower bound plus the (weighted) discriminative objective
-
-    """
-
-    return -1 * torch.mean(lower_bound + alpha * log_qy)
-
-
-def save_ckp(state, is_best, checkpoint_dir, best_model_dir):
-    f_path = checkpoint_dir / "checkpoint.pt"
-    torch.save(state, f_path)
-    if is_best:
-        best_fpath = best_model_dir / "best_model.pt"
-        shutil.copyfile(f_path, best_fpath)
-
-
-def check_terminate(epoch, best_epoch, n_patience, n_epochs):
-    if (epoch - 1) - best_epoch > n_patience:
-        return True
-    if epoch > n_epochs:
-        return True
-    return False
+        break
