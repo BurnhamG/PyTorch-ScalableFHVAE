@@ -82,7 +82,7 @@ def prepare_numpy(
         n_mels:      Number of filter banks if using 'fbank' as the computed feature
 
     """
-    opt_paths = (output_dir, wav_scp, feat_scp, len_scp)
+    opt_paths = (wav_scp, feat_scp, len_scp)
 
     root_dir = Path(os.path.abspath(f"./datasets/{dataset}"))
     if output_dir is not None:
@@ -91,11 +91,14 @@ def prepare_numpy(
         set_path = root_dir / set_name
 
     file_paths = []
-    for file, name in zip(opt_paths[1:], ("wav.scp", "feats.scp", "len.scp")):
+    for file, name in zip(opt_paths, ("wav.scp", "feats.scp", "len.scp")):
         if file is not None:
             file_paths.append(Path(file))
         else:
             file_paths.append(set_path / name)
+
+    if not os.path.exists(file_paths[0]):
+        raise ValueError("The wav.scp file does not exist!")
 
     for p in file_paths:
         os.makedirs(p, exist_ok=True)
