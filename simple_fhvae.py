@@ -89,7 +89,7 @@ class SimpleFHVAE(nn.Module):
         z1_mu, z1_logvar, z1_sample = self.gauss_layer(z1_pre_out, self.z1_dim)
         qz1_x = [z1_mu, z1_logvar]
 
-        x_pre_out = self.pre_decoder(z1_sample, z2_sample, self. z1_hus)
+        x_pre_out = self.pre_decoder(z1_sample, z2_sample, self.z1_hus)
         T, F = x.shape[1:]
         x_mu, x_logvar, x_sample = self.gauss_layer(x_pre_out, T * F)
         x_mu = torch.reshape(x_mu, (-1, T, F))
@@ -113,7 +113,7 @@ class SimpleFHVAE(nn.Module):
         logits = torch.sum(logits, dim=-1)
         log_qy = loss(input=logits, target=mu_idx)
 
-        return lower_bound, log_qy
+        return lower_bound, log_qy, log_px_z, neg_kld_z1, neg_kld_z2, log_pmu2
 
 
 class LatentSegPreEncoder(nn.Module):

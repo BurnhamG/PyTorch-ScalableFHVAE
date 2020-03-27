@@ -393,7 +393,8 @@ for epoch in range(args.n_epochs):
     for batch_idx, data in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
-        lower_bound, discrim_loss = model(*data, len(train_dataset))
+        # tr_summ_vars are log_px_z, neg_kld_z1, neg_kld_z2, log_pmu2
+        lower_bound, discrim_loss, tr_summ_vars = model(*data, len(train_dataset))
         loss = loss_function(lower_bound, discrim_loss, args.alpha_dis)
         loss.backward()
         train_loss += loss.item()
@@ -416,12 +417,11 @@ for epoch in range(args.n_epochs):
     with torch.no_grad():
         for idx, data in enumerate(validation_loader):
             data = data.to(device)
-            validation_lower_bound, validation_discrim_loss = model(
-                *data, len(validation_loader.dataset)
-            )
-            validation_loss += loss_function(
-                lower_bound, discrim_loss, args.alpha_dis
-            ).item()
+            val_lower_bound, _, val_summ_vars = model(*data, len(val_loader.dataset))
+            val_loss += loss_function(lower_bound, discrim_loss, args.alpha_dis).item()
+            summary_list = [
+                map(torch.sum, summary_list, (val_lower_bound, *val_summ_vars))
+            ]
             if idx + 1 % args.log_interval == 0:
                 current_pos = batch_idx * len(data)
                 tot_len = len(train_loader.dataset)
