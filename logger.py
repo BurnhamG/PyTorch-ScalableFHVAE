@@ -1,3 +1,6 @@
+# Logger classes originally from
+# https://github.com/SeanNaren/deepspeech.pytorch/blob/master/logger.py
+
 import os
 
 import torch
