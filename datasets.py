@@ -7,6 +7,7 @@ from collections import OrderedDict
 import numpy as np
 import json
 from kaldiio import load_scp
+from pathlib import Path
 
 
 def scp2dict(path, dtype=str, seqlist=None):
@@ -49,8 +50,8 @@ class Segment(object):
 class BaseDataset(Dataset):
     def __init__(
         self,
-        feat_scp: str,
-        len_scp: str,
+        feat_scp: Path,
+        len_scp: Path,
         min_len: int = 1,
         mvn_path: str = None,
         seg_len: int = 20,
@@ -59,15 +60,15 @@ class BaseDataset(Dataset):
     ):
         """
         Args:
-            feat_scp(str):  Feature scp path
-            len_scp(str):   Sequence-length scp path
-            min_len(int):   Keep sequence no shorter than min_len
+            feat_scp:  Feature scp path
+            len_scp:   Sequence-length scp path
+            min_len:   Keep sequence no shorter than min_len
             mvn_path:       Path to file storing the mean and variance of the sequences
                                 for normalization
-            seg_len(int):   Segment length
-            seg_shift(int): Segment shift if seg_rand is False; otherwise randomly
+            seg_len:   Segment length
+            seg_shift: Segment shift if seg_rand is False; otherwise randomly
                                 extract floor(seq_len/seg_shift) segments per sequence
-            rand_seg(bool): If True, randomly extract segments
+            rand_seg: If True, randomly extract segments
         """
         feats = scp2dict(feat_scp)
         lens = scp2dict(len_scp, int, feats.keys())
@@ -184,8 +185,8 @@ class BaseDataset(Dataset):
 class NumpyDataset(BaseDataset):
     def __init__(
         self,
-        feat_scp: str,
-        len_scp: str,
+        feat_scp: Path,
+        len_scp: Path,
         min_len: int = 1,
         mvn_path: str = None,
         seg_len: int = 20,
@@ -194,13 +195,13 @@ class NumpyDataset(BaseDataset):
     ):
         """
         Args:
-            feat_scp(str):  Feature scp path
-            len_scp(str):   Sequence-length scp path
-            min_len(int):   Keep sequence no shorter than min_len
-            seg_len(int):   Segment length
-            seg_shift(int): Segment shift if seg_rand is False; otherwise randomly
+            feat_scp:  Feature scp path
+            len_scp:   Sequence-length scp path
+            min_len:   Keep sequence no shorter than min_len
+            seg_len:   Segment length
+            seg_shift: Segment shift if seg_rand is False; otherwise randomly
                                 extract floor(seq_len/seg_shift) segments per sequence
-            rand_seg(bool): If True, randomly extract segments
+            rand_seg: If True, randomly extract segments
         """
         super().__init__(
             feat_scp, len_scp, min_len, mvn_path, seg_len, seg_shift, rand_seg
@@ -221,8 +222,8 @@ class NumpyDataset(BaseDataset):
 class KaldiDataset(BaseDataset):
     def __init__(
         self,
-        feat_scp: str,
-        len_scp: str,
+        feat_scp: Path,
+        len_scp: Path,
         min_len: int = 1,
         mvn_path: str = None,
         seg_len: int = 20,

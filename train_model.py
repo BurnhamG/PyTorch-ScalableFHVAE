@@ -1,4 +1,5 @@
 import sys
+from utils import create_output_dir
 from preprocess_data import preprocess_data
 import argparse
 import os
@@ -151,13 +152,13 @@ parser.add_argument(
     "--z1-hus",
     default=[128, 128],
     nargs=2,
-    help="List of the number of hideen units for the two layers of z1",
+    help="List of the number of hidden units for the two layers of z1",
 )
 parser.add_argument(
     "--z2-hus",
     default=[128, 128],
     nargs=2,
-    help="List of the number of hideen units for the two layers of z2",
+    help="List of the number of hidden units for the two layers of z2",
 )
 parser.add_argument(
     "--z1-dim", type=int, default=16, help="Dimensionality of the z1 layer"
@@ -320,9 +321,10 @@ else:
             args.rand_seg,
         ]
     else:
+        dataset_dir = create_output_dir(args.dataset, args.feat_type, args.data_format)
         train_dataset_args = [
-            args.feature_scp,
-            args.length_scp,
+            dataset_dir / "train" / "feats.scp",
+            dataset_dir / "train" / "len.scp",
             args.min_len,
             args.mvn_path,
             args.seg_len,
@@ -330,8 +332,8 @@ else:
             args.rand_seg,
         ]
         dev_dataset_args = [
-            args.feature_scp,
-            args.length_scp,
+            dataset_dir / "dev" / "feats.scp",
+            dataset_dir / "dev" / "len.scp",
             args.min_len,
             args.mvn_path,
             args.seg_len,
