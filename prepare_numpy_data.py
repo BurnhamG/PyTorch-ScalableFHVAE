@@ -54,7 +54,7 @@ def prepare_numpy(
     dataset: str,
     set_name: str,
     wav_scp: str,
-    output_dir: str = None,
+    output_dir: Path = None,
     ftype: str = "fbank",
     sample_rate: int = None,
     win_t: float = 0.025,
@@ -78,21 +78,19 @@ def prepare_numpy(
 
     """
 
-    root_dir = Path(os.path.abspath(f"./datasets/{dataset}"))
     if output_dir is not None:
-        set_path = Path(output_dir)
+        set_path = Path(output_dir / set_name)
     else:
-        set_path = root_dir / set_name
+        raise ValueError()
 
     file_paths = []
     for name in ("wav.scp", "feats.scp", "len.scp"):
         file_paths.append(set_path / name)
 
     if not os.path.exists(file_paths[0]):
-        raise ValueError("The wav.scp file does not exist!")
+        raise ValueError(f"The wav.scp file at {file_paths[0]} does not exist!")
 
-    for p in file_paths:
-        os.makedirs(p, exist_ok=True)
+    os.makedirs(set_path, exist_ok=True)
 
     wav_path, feat_path, len_path = file_paths
 
@@ -114,14 +112,14 @@ def prepare_numpy(
                 raise ValueError(f"Inconsistent sample rate ({sample_rate} != {_sr}.")
 
             feat = generate_feat(ftype, y, sample_rate, win_t, hop_t, n_mels)
-            np_path = os.path.join(set_path, "numpy", f"{seq}.npy")
+            np_path = os.path.join(set_path, f"{seq}.npy")
             with open(np_path, "wb") as numpyfile:
                 np.save(numpyfile, feat)
             featfile.write(f"{seq} {np_path}\n")
             lenfile.write(f"{seq} {len(feat)}\n")
             count = i + 1
             if (count) % 1000 == 0:
-                print(f"{count} files in {time.time() - start_time} seconds.")
+                print(f"{count} {set_name} files in {time.time() - start_time} seconds.")
 
     print(
         f"Processed {count} files in {set_name} set over {time.time() - start_time} seconds."

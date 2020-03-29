@@ -24,7 +24,7 @@ def preprocess_data(args):
         paths = process_librispeech(Path(args.raw_data_dir), dataset_directory)
 
     starmap_args = []
-    if args.is_numpy:
+    if args.data_format == "numpy":
         for set_name, wav_scp in zip(data_sets, paths):
             func_args = [
                 args.dataset,
@@ -57,6 +57,6 @@ def preprocess_data(args):
     print(f"Processed {tot_files} files in {time.time() - files_start_time} seconds.")
 
     file_paths = zip(("wav_pth", "feat_pth", "len_pth"), [r[1] for r in results])
-    paths_dict = {ds: {name: pth} for ds, (name, pth) in zip(data_sets, file_paths)}
+    paths_dict = {ds: {name: pth} for (name, pth) in file_paths for ds in data_sets}
 
     return paths_dict

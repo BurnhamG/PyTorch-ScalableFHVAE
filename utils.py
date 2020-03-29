@@ -204,7 +204,7 @@ class AudioUtils:
         preemphasis: float = 0.97,
         n_mels: int = 80,
         log: bool = True,
-        norm_mel: bool = False,
+        norm_mel: str = "slaney",
         log_floor: int = -20,
     ) -> Array[float]:
         """Compute Mel-scale filter bank coefficients:

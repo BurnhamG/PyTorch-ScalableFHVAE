@@ -17,9 +17,10 @@ def find_audios(dir: Path) -> List[Tuple[str, str]]:
 
     """
     uid_path = []
-    for file in sorted(os.listdir(dir)):
-        if file.lower().endswith(".flac"):
-            uid_path.append((os.path.splitext(file)[0], os.path.join(dir, file)))
+    for root, _, files in sorted(os.walk(dir)):
+        for file in files:
+            if file.lower().endswith(".flac"):
+                uid_path.append((os.path.splitext(file)[0], os.path.join(root, file)))
     return sorted(uid_path, key=lambda x: x[0])
 
 
@@ -29,7 +30,9 @@ def write_scp(root_dir: Path, out_path: Path, set_list: list) -> None:
     with open(out_path, "w") as f:
         uid_path = []
         for se in set_list:
-            uid_path += find_audios(root_dir / f"{se}")
+            if os.path.exists(root_dir / f"{se}"):
+                uid_path += find_audios(root_dir / f"{se}")
+        print(uid_path, "UID_PATH")
         for uid, path in uid_path:
             f.write(f"{uid} {path}\n")
 
@@ -59,7 +62,7 @@ def process_librispeech(
         test_list = ["test-clean", "dev-other"]
 
     train_scp, dev_scp, test_scp = [
-        raw_data_dir / f"{se}/wav.scp" for se in ["train", "dev", "test"]
+        output_dir / f"{se}/wav.scp" for se in ["train", "dev", "test"]
     ]
 
     for scp, set_list in zip(
