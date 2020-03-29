@@ -19,7 +19,12 @@ class VisdomLogger(object):
             title=id,
             ylabel="",
             xlabel="Epoch",
-            legend=["Loss", "Lower Bound", "Discriminative Loss"],
+            legend=[
+                "Training Loss",
+                "Validation Loss",
+                "Lower Bound",
+                "Discriminative Loss",
+            ],
         )
         self.viz_window = None
         self.epochs = torch.arange(1, num_epochs + 1)
@@ -29,7 +34,8 @@ class VisdomLogger(object):
         x_axis = self.epochs[0 : epoch + 1]
         y_axis = torch.stack(
             (
-                values["loss_results"][: epoch + 1],
+                values["train_loss_results"][: epoch + 1],
+                values["val_loss_results"][: epoch + 1],
                 values["lower_bound_results"][: epoch + 1],
                 values["discrim_loss_results"][: epoch + 1],
             ),
@@ -44,7 +50,7 @@ class VisdomLogger(object):
         )
 
     def load_previous_values(self, start_epoch, package):
-        # Add all values except the iteration we're starting from
+        # Add all values except the epoch we're starting from
         self.update(start_epoch - 1, package)
 
 
@@ -58,13 +64,15 @@ class TensorBoardLogger(object):
         self.log_params = log_params
 
     def update(self, epoch, values, parameters=None):
-        loss, lower_bound, discrim_loss = (
-            values["loss_results"][epoch + 1],
+        tr_loss, val_loss, lower_bound, discrim_loss = (
+            values["train_loss_results"][epoch + 1],
+            values["val_loss_results"][epoch + 1],
             values["lower_bound_results"][epoch + 1],
             values["discrim_loss_results"][epoch + 1],
         )
         values = {
-            "Avg Train Loss": loss,
+            "Avg Train Loss": tr_loss,
+            "Avg Val Loss": val_loss,
             "Avg Lower Bound": lower_bound,
             "Avg Discriminative Loss": discrim_loss,
         }
@@ -78,13 +86,15 @@ class TensorBoardLogger(object):
                 )
 
     def load_previous_values(self, start_epoch, values):
-        loss_results = values["loss_results"][:start_epoch]
+        train_loss_results = values["train_loss_results"][:start_epoch]
+        val_loss_results = values["val_loss_results"][:start_epoch]
         lb_results = values["lower_bound_results"][:start_epoch]
         dl_results = values["discrim_loss_results"][:start_epoch]
 
         for i in range(start_epoch):
             values = {
-                "Avg Train Loss": loss_results[i],
+                "Avg Train Loss": train_loss_results[i],
+                "Avg Val Loss": val_loss_results[i],
                 "Avg Lower Bound": lb_results[i],
                 "Avg Discriminative Loss": dl_results[i],
             }
