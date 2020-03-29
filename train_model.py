@@ -109,7 +109,7 @@ parser.add_argument(
     help="Path to the fbank.conf file kaldi should use",
 )
 parser.add_argument(
-    "--kaldi-root", type=str, default=None, help="Root directory for Kaldi"
+    "--kaldi-root", type=str, default="./kaldi/", help="Root directory for Kaldi"
 )
 parser.add_argument(
     "--min-len",
@@ -185,7 +185,7 @@ parser.add_argument(
     "--visdom", action="store_true", dest="visdom", help="Enable Visdom logging"
 )
 parser.add_argument(
-    "--log-dir", default="visualize/tensorboard", help="Location of tensorboard log",
+    "--log-dir", default="./visualize/tensorboard", help="Location of tensorboard log",
 )
 parser.add_argument(
     "--log-params",
