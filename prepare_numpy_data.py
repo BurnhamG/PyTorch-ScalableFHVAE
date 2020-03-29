@@ -53,10 +53,8 @@ def generate_feat(
 def prepare_numpy(
     dataset: str,
     set_name: str,
-    wav_scp: str = None,
+    wav_scp: str,
     output_dir: str = None,
-    feat_scp: str = None,
-    len_scp: str = None,
     ftype: str = "fbank",
     sample_rate: int = None,
     win_t: float = 0.025,
@@ -66,15 +64,12 @@ def prepare_numpy(
     """Handles Numpy format feature and script file generation and saving
 
     If wav.scp does not exist, an error will be raised.
-    If feat_scp and/or len_scp are None, they will be saved to the set_name folder.
 
     Args:
         dataset:     Name of the dataset for which features are generated
         set_name:    Name of the set (train, dev, test) to operate on
         wav_scp:     Input wav.scp file
         output_dir:  Directory to write to
-        feat_scp:    Location to save the feats.scp file
-        len_scp:     Location to save the len.scp file
         ftype:       Type of computed feature
         sample_rate: Sample rate for resampling if not None
         win_t:       FFT window size in seconds
@@ -82,7 +77,6 @@ def prepare_numpy(
         n_mels:      Number of filter banks if using 'fbank' as the computed feature
 
     """
-    opt_paths = (wav_scp, feat_scp, len_scp)
 
     root_dir = Path(os.path.abspath(f"./datasets/{dataset}"))
     if output_dir is not None:
@@ -91,11 +85,8 @@ def prepare_numpy(
         set_path = root_dir / set_name
 
     file_paths = []
-    for file, name in zip(opt_paths, ("wav.scp", "feats.scp", "len.scp")):
-        if file is not None:
-            file_paths.append(Path(file))
-        else:
-            file_paths.append(set_path / name)
+    for name in ("wav.scp", "feats.scp", "len.scp"):
+        file_paths.append(set_path / name)
 
     if not os.path.exists(file_paths[0]):
         raise ValueError("The wav.scp file does not exist!")
@@ -144,8 +135,6 @@ if __name__ == "__main__":
     )
     parser.add_argument("wav_scp", type=str, help="Input wav scp file")
     parser.add_argument("np_dir", type=str, help="Output directory for numpy matrices")
-    parser.add_argument("feat_scp", type=str, help="Output feats.scp file")
-    parser.add_argument("len_scp", type=str, help="Output len.scp file")
     parser.add_argument(
         "--dataset",
         type=str,
@@ -192,8 +181,6 @@ if __name__ == "__main__":
         args.set_name,
         args.wav_scp,
         args.np_dir,
-        args.feat_scp,
-        args.len_scp,
         args.ftype,
         args.sr,
         args.win_t,

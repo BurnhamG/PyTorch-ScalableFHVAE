@@ -6,35 +6,24 @@ from pathlib import Path
 
 
 def prepare_kaldi(
-    wav_scp: str,
-    feat_ark: str = None,
-    feat_scp: str = None,
-    len_scp: str = None,
-    fbank_conf: str = "./misc/fbank.conf",
-    kaldi_root: str = "./kaldi",
+    wav_scp: str, fbank_conf: str = "./misc/fbank.conf", kaldi_root: str = "./kaldi",
 ) -> Tuple[Path, Path, Path]:
     """Handles Kaldi format feature and script file generation and saving
 
-    If any of feat_ark, feat_scp, or len_scp are None, they will be saved to the
-        same directory as the wav_scp file that is provided
 
     Args:
         wav_scp:    Input wav.scp file
-        feat_ark:   Location to save the feats.ark file
-        feat_scp:   Location to save the feats.scp file
-        len_scp:    Location to save the len.scp file
         fbank_conf: Location of the fbank.conf file for Kaldi to use in feature computation
         kaldi_root: Kaldi root directory
 
     """
-    out_files = [feat_ark, feat_scp, len_scp]
     filenames = ("feats.ark", "feats.scp", "len.scp")
 
-    # If these names are not provided, save them to the same location as the wav.scp
-    for p, name in zip(out_files, filenames):
-        if p is None:
-            p = os.path.join(os.path.dirname(wav_scp), name)
-        os.makedirs(os.path.dirname(p), exist_ok=True)
+    file_paths = [os.path.join(os.path.dirname(wav_scp), name) for name in filenames]
+    for path in file_paths:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    feat_ark, feat_scp, len_scp = file_paths
 
     feat_comp_cmd = [
         os.path.join(kaldi_root, "src/bin/compute-fbank-feats"),
@@ -72,13 +61,6 @@ if __name__ == "__main__":
     )
     parser.add_argument("wav_scp", type=str, help="Input wav scp file")
     parser.add_argument(
-        "feat_ark", type=str, default=None, help="Output feats.ark file"
-    )
-    parser.add_argument(
-        "feat_scp", type=str, default=None, help="Output feats.scp file"
-    )
-    parser.add_argument("len_scp", type=str, default=None, help="Output len.scp file")
-    parser.add_argument(
         "--fbank_conf",
         type=str,
         default="./misc/fbank.conf",
@@ -91,10 +73,5 @@ if __name__ == "__main__":
     print(args)
 
     prepare_kaldi(
-        args.wav_scp,
-        args.feat_ark,
-        args.feat_scp,
-        args.len_scp,
-        args.fbank_conf,
-        args.kaldi_root,
+        args.wav_scp, args.fbank_conf, args.kaldi_root,
     )

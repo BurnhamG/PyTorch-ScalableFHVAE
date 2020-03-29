@@ -2,6 +2,11 @@ import librosa
 import numpy as np
 from nptyping import Array
 from pathlib import Path
+import torch
+from simple_fhvae import SimpleFHVAE
+from fhvae import FHVAE
+import shutil
+from typing import Optional
 
 
 def create_output_dir(dataset: str, feat_type: str, data_format: str) -> Path:
@@ -15,6 +20,107 @@ def create_output_dir(dataset: str, feat_type: str, data_format: str) -> Path:
     feat_type = "fbank" if data_format == "kaldi" else feat_type
 
     return Path(dataset + f"_{feat_type}")
+
+
+def load_checkpoint_file(args):
+    strict_mode = True
+    checkpoint = torch.load(args.continue_from)
+    model_type = checkpoint["args"].model_type
+    model_params = checkpoint["model_params"]
+    if model_type == "fhvae":
+        model = FHVAE(*model_params)
+    elif model_type == "simple_fhvae":
+        model = SimpleFHVAE(*model_params)
+    else:
+        # Fallback just in case
+        model = args.model_type
+        strict_mode = False
+    model.load_state_dict(checkpoint["state_dict"], strict=strict_mode)
+
+    # We don't want to restart training if this is the case
+    if not args.finetune:
+        optim_state = checkpoint["optimizer"]
+        start_epoch = checkpoint["epoch"]
+        best_val_lb = checkpoint["best_val_lb"]
+        start_iter = checkpoint.get("iteration", None)
+        summary_list = checkpoint["summary_vals"]
+        if start_iter is None:
+            # Checkpoint was saved at the end of an epoch, start from next epoch
+            start_epoch += 1
+            start_iter = 0
+        values = checkpoint["values"]
+        attrs = [
+            "feat_type",
+            "data_format",
+            "alpha_dis",
+            "epochs",
+            "patience",
+            "steps_per_epoch",
+            "log_interval",
+            "checkpoint_interval",
+            "training_batch_size",
+            "dev_batch_size",
+            "tensorboard",
+            "visdom",
+            "log_dir",
+            "log_params",
+            "checkpoint_dir",
+            "best_model_dir",
+        ]
+        for attr in attrs:
+            vars(args)[attr] = vars(checkpoint["args"])[attr]
+
+    return (
+        args,
+        values,
+        optim_state,
+        start_epoch,
+        best_val_lb,
+        start_iter,
+        summary_list,
+    )
+
+
+def save_checkpoint(
+    model,
+    optimizer,
+    args,
+    summary_list,
+    values_dict,
+    run_info: str,
+    epoch: int,
+    iteration: Optional[int],
+    val_lower_bound: float,
+    best_val_lb: float,
+    checkpoint_dir: str,
+    best_model_path: str,
+):
+    """Saves checkpoint files"""
+    if val_lower_bound > best_val_lb:
+        is_best = True
+
+    checkpoint = {
+        "args": args,
+        "best_val_lb": best_val_lb,
+        "epoch": epoch,
+        "iteration": iteration,
+        "model_params": (
+            model.z1_hus,
+            model.z2_hus,
+            model.z1_dim,
+            model.z2_dim,
+            model.x_hus,
+        ),
+        "optimizer": optimizer.state_dict(),
+        "state_dict": model.state_dict(),
+        "summary_vals": summary_list,
+        "values": values_dict,
+    }
+
+    f_path = Path(checkpoint_dir) / f"{model}_{run_info}_e{epoch}_i{iteration}.tar"
+    torch.save(checkpoint, f_path)
+    if is_best:
+        shutil.copyfile(f_path, Path(best_model_path))
 
 
 class AudioUtils:

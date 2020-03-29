@@ -1,23 +1,16 @@
 import sys
+from preprocess_data import preprocess_data
 import argparse
 import os
 import torch
-from preprocess_timit import process_timit
-from preprocess_librispeech import process_librispeech
 from pathlib import Path
-from prepare_numpy_data import prepare_numpy
-from prepare_kaldi_data import prepare_kaldi
-import time
-from multiprocessing import Pool
-from utils import create_output_dir
 from simple_fhvae import SimpleFHVAE
 from fhvae import FHVAE
 from torch.optim import Adam
-from typing import Iterable, Optional
-from datasets import NumpyDataset, KaldiDataset
 from logger import VisdomLogger, TensorBoardLogger
-import shutil
 import numpy as np
+from datasets import NumpyDataset, KaldiDataset
+from utils import load_checkpoint_file, save_checkpoint
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--dataset", type=str, help="Dataset to use")
@@ -78,6 +71,8 @@ parser.add_argument(
     dest="is_preprocessed",
     help="Use this flag if the data is already preprocessed",
 )
+
+
 parser.add_argument(
     "--learning-rate", type=float, default=0.001, help="Learning rate for training"
 )
@@ -86,12 +81,6 @@ parser.add_argument(
 )
 parser.add_argument(
     "--beta-two", type=float, default=0.999, help="Beta2 for the Adam optimizer"
-)
-parser.add_argument(
-    "--feature-scp", type=str, default=None, help="Path to the feature scp file"
-)
-parser.add_argument(
-    "--length-scp", type=str, default=None, help="Path to the length scp file"
 )
 parser.add_argument(
     "--sample-rate",
@@ -112,12 +101,6 @@ parser.add_argument(
     help="Window stride for spectrogram in seconds",
 )
 parser.add_argument("--n-mels", type=int, default=80, help="Number of filter banks")
-parser.add_argument(
-    "--feat-ark",
-    type=str,
-    default=None,
-    help="Path to the preprocessed Kaldi .ark file",
-)
 parser.add_argument(
     "--fbank-conf",
     type=str,
@@ -248,48 +231,6 @@ def loss_function(lower_bound, log_qy, alpha=10.0):
     return -1 * torch.mean(lower_bound + alpha * log_qy)
 
 
-def save_ckp(
-    model,
-    optimizer,
-    args,
-    summary_list,
-    values_dict,
-    run_info: str,
-    epoch: int,
-    iteration: Optional[int],
-    val_lower_bound: float,
-    best_val_lb: float,
-    checkpoint_dir: str,
-    best_model_path: str,
-):
-    """Saves checkpoint files"""
-    if val_lower_bound > best_val_lb:
-        is_best = True
-
-    checkpoint = {
-        "args": args,
-        "best_val_lb": best_val_lb,
-        "epoch": epoch,
-        "iteration": iteration,
-        "model_params": (
-            model.z1_hus,
-            model.z2_hus,
-            model.z1_dim,
-            model.z2_dim,
-            model.x_hus,
-        ),
-        "optimizer": optimizer.state_dict(),
-        "state_dict": model.state_dict(),
-        "summary_vals": summary_list,
-        "values": values_dict,
-    }
-
-    f_path = Path(checkpoint_dir) / f"{model}_{run_info}_e{epoch}_i{iteration}.tar"
-    torch.save(checkpoint, f_path)
-    if is_best:
-        shutil.copyfile(f_path, Path(best_model_path))
-
-
 def check_terminate(epoch, best_epoch, patience, epochs):
     """Checks if training should be terminated"""
 
@@ -306,7 +247,7 @@ if args.raw_data_dir is None and args.is_preprocessed is False:
     )
 
 if args.min_len is None:
-    min_len = args.seg_len
+    args.min_len = args.seg_len
 
 if args.device == "gpu":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -336,147 +277,67 @@ optim_state = None
 # Load a previously saved checkpoint
 if args.continue_from:
     print(f"Loading {args.continue_from}.")
-    strict_mode = True
-    checkpoint = torch.load(args.continue_from)
-    model_type = checkpoint["args"].model_type
-    model_params = checkpoint["model_params"]
-    if model_type == "fhvae":
-        model = FHVAE(*model_params)
-    elif model_type == "simple_fhvae":
-        model = SimpleFHVAE(*model_params)
-    else:
-        # Fallback just in case
-        model = args.model_type
-        strict_mode = False
-    model.load_state_dict(checkpoint["state_dict"], strict=False)
-    # We don't want to restart training if this is the case
-    if not args.finetune:
-        optim_state = checkpoint["optimizer"]
-        start_epoch = checkpoint["epoch"]
-        best_val_lb = checkpoint["best_val_lb"]
-        start_iter = checkpoint.get("iteration", None)
-        summary_list = checkpoint["summary_vals"]
-        if start_iter is None:
-            values = checkpoint["values"]
-            train_loss = values["train_loss_results"]
-            val_loss = values["val_loss_results"]
-            lower_bound_results = values["lower_bound_results"]
-            discrim_loss_results = values["discrim_loss_results"]
-            # Checkpoint was saved at the end of an epoch, start from next epoch
-            start_epoch += 1
-            start_iter = 0
-            attrs = [
-                "feat_type",
-                "data_format",
-                "alpha_dis",
-                "epochs",
-                "patience",
-                "steps_per_epoch",
-                "log_interval",
-                "checkpoint_interval",
-                "training_batch_size",
-                "dev_batch_size",
-                "tensorboard",
-                "visdom",
-                "log_dir",
-                "log_params",
-                "checkpoint_dir",
-                "best_model_dir",
-            ]
-            for attr in attrs:
-                vars(args)[attr] = vars(checkpoint["args"])[attr]
-            base_string = f"{args.dataset}_{args.data_format}_{args.feat_type}"
-            exp_string = f"{args.model_type}_e{args.epochs}_s{args.steps_per_epoch}_p{args.patience}_a{args.alpha_dis}"
-            run_id = f"{base_string}_{exp_string}"
-            if args.visdom:
-                visdom_logger = VisdomLogger(run_id, args.epochs)
-                visdom_logger.load_previous_values(start_epoch, values)
-            if args.tensorboard:
-                tensorboard_logger = TensorBoardLogger(
-                    run_id, args.log_dir, args.log_params
-                )
-                tensorboard_logger.load_previous_values(start_epoch, values)
+    (
+        args,
+        values,
+        optim_state,
+        start_epoch,
+        best_val_lb,
+        start_iter,
+        summary_list,
+    ) = load_checkpoint_file(args)
+    base_string = f"{args.dataset}_{args.data_format}_{args.feat_type}"
+    exp_string = f"{args.model_type}_e{args.epochs}_s{args.steps_per_epoch}_p{args.patience}_a{args.alpha_dis}"
+    run_id = f"{base_string}_{exp_string}"
+
+    # Load previous values into loggers
+    if args.visdom:
+        visdom_logger = VisdomLogger(run_id, args.epochs)
+        visdom_logger.load_previous_values(start_epoch, values)
+    if args.tensorboard:
+        tensorboard_logger = TensorBoardLogger(run_id, args.log_dir, args.log_params)
+        tensorboard_logger.load_previous_values(start_epoch, values)
 else:
-    data_sets = ("train", "dev", "test")
-    # load data
-    dataset_directory = create_output_dir(
-        args.dataset, args.feat_type, args.data_format
-    )
-
-    # paths is (training_wav_scp, dev_wav_scp, test_wav_scp)
+    # Starting fresh
     if not args.is_preprocessed:
-        if args.dataset == "timit":
-            paths = process_timit(Path(args.raw_data_dir), dataset_directory)
-        else:
-            paths = process_librispeech(Path(args.raw_data_dir), dataset_directory)
-
-        starmap_args = []
-        if args.is_numpy:
-            for set_name, wav_scp in zip(data_sets, paths):
-                func_args = [
-                    args.dataset,
-                    set_name,
-                    wav_scp,
-                    dataset_directory,
-                    args.feature_scp,
-                    args.length_scp,
-                    args.feat_type,
-                    args.sample_rate,
-                    args.win_size,
-                    args.hop_size,
-                    args.n_mels,
-                ]
-                starmap_args.append(tuple(func_args))
-            files_start_time = time.time()
-            with Pool(3) as p:
-                results: Iterable = p.starmap(prepare_numpy, starmap_args)
-
-            # results is a list of tuples of (files_processed, (wav_pth, feat_pth, len_pth))
-            tot_files = sum(r[0] for r in results)
-            paths_dict = {
-                ds: {
-                    name: p for name, p in zip(("wav_pth", "feat_pth", "len_pth"), pth)
-                }
-                for ds, pth in zip(data_sets, [r[1] for r in results])
-            }
-
-            print(
-                f"Processed {tot_files} files in {time.time() - files_start_time} seconds."
-            )
-        else:
-            for wav_scp in paths[1:]:
-                func_args = [
-                    str(wav_scp),
-                    args.feat_ark,
-                    args.feature_scp,
-                    args.length_scp,
-                    args.fbank_conf,
-                    args.kaldi_root,
-                ]
-                starmap_args.append(tuple(func_args))
-            with Pool(3) as p:
-                results = p.starmap(prepare_kaldi, starmap_args)
-            print("Processing complete")
-
-    train_dataset_args = [
-        paths_dict["train"]["feat_pth"],
-        paths_dict["train"]["len_pth"],
-        min_len,
-        args.mvn_path,
-        args.seg_len,
-        args.seg_shift,
-        args.rand_seg,
-    ]
-    dev_dataset_args = [
-        paths_dict["dev"]["feat_pth"],
-        paths_dict["dev"]["len_pth"],
-        min_len,
-        args.mvn_path,
-        args.seg_len,
-        args.seg_shift,
-        args.rand_seg,
-    ]
-
+        paths_dict = preprocess_data(args)
+        train_dataset_args = [
+            paths_dict["train"]["feat_pth"],
+            paths_dict["train"]["len_pth"],
+            args.min_len,
+            args.mvn_path,
+            args.seg_len,
+            args.seg_shift,
+            args.rand_seg,
+        ]
+        dev_dataset_args = [
+            paths_dict["dev"]["feat_pth"],
+            paths_dict["dev"]["len_pth"],
+            args.min_len,
+            args.mvn_path,
+            args.seg_len,
+            args.seg_shift,
+            args.rand_seg,
+        ]
+    else:
+        train_dataset_args = [
+            args.feature_scp,
+            args.length_scp,
+            args.min_len,
+            args.mvn_path,
+            args.seg_len,
+            args.seg_shift,
+            args.rand_seg,
+        ]
+        dev_dataset_args = [
+            args.feature_scp,
+            args.length_scp,
+            args.min_len,
+            args.mvn_path,
+            args.seg_len,
+            args.seg_shift,
+            args.rand_seg,
+        ]
     if args.data_format == "numpy":
         train_dataset = NumpyDataset(*train_dataset_args)
         dev_dataset = NumpyDataset(*dev_dataset_args)
@@ -520,7 +381,9 @@ for epoch in range(start_epoch, args.epochs):
         data = data.to(device)
         optimizer.zero_grad()
         # tr_summ_vars are log_px_z, neg_kld_z1, neg_kld_z2, log_pmu2
-        lower_bound, discrim_loss, tr_summ_vars = model(*data, len(train_dataset))
+        lower_bound, discrim_loss, tr_summ_vars = model(
+            *data, len(train_loader.dataset)
+        )
         loss = loss_function(lower_bound, discrim_loss, args.alpha_dis)
         loss.backward()
         train_loss += loss.item()
@@ -538,13 +401,14 @@ for epoch in range(start_epoch, args.epochs):
                 print("Training diverged")
                 raise sys.exit(2)
 
-    train_loss /= len(val_loader.dataset)
+    train_loss /= len(train_loader.dataset)
     print(f"====> Train set average loss: {train_loss:.4f}")
 
     # eval
     model.eval()
     val_loss = 0.0
-    summary_list = [0, 0, 0, 0, 0]
+    if summary_list is None:
+        summary_list = [0, 0, 0, 0, 0]
     with torch.no_grad():
         for idx, data in enumerate(val_loader):
             data = data.to(device)
@@ -555,15 +419,15 @@ for epoch in range(start_epoch, args.epochs):
             ]
             if idx + 1 % args.log_interval == 0:
                 current_pos = batch_idx * len(data)
-                tot_len = len(train_loader.dataset)
-                percentage = 100.0 * batch_idx / len(train_loader)
+                tot_len = len(val_loader.dataset)
+                percentage = 100.0 * batch_idx / len(val_loader)
                 cur_loss = loss.item() / len(data)
 
                 print(
                     f"====> Validation Epoch: {epoch} [{current_pos}/{tot_len} ({percentage:.0f}%)]\tLoss: {cur_loss:.6f}"
                 )
             if idx + 1 % args.checkpoint_interval == 0:
-                save_ckp(
+                save_checkpoint(
                     model,
                     optimizer,
                     args,
@@ -597,7 +461,7 @@ for epoch in range(start_epoch, args.epochs):
         visdom_logger.update(epoch, values)
 
     # Iteration is None here so we know this was saved at the end of an epoch
-    save_ckp(
+    save_checkpoint(
         model,
         optimizer,
         args,
@@ -619,3 +483,4 @@ for epoch in range(start_epoch, args.epochs):
     if check_terminate(epoch, best_epoch, args.patience, args.epochs):
         print("Training terminated!")
         break
+    summary_list = None
