@@ -56,7 +56,13 @@ def preprocess_data(args):
     tot_files = sum(r[0] for r in results)
     print(f"Processed {tot_files} files in {time.time() - files_start_time} seconds.")
 
-    file_paths = zip(("wav_pth", "feat_pth", "len_pth"), [r[1] for r in results])
-    paths_dict = {ds: {name: pth} for (name, pth) in file_paths for ds in data_sets}
+    file_paths = list(zip(data_sets, [r[1] for r in results]))
+    paths_dict = {
+        se[0]: {
+            file_id: path
+            for (file_id, path) in zip(("wav_pth", "feat_pth", "len_pth"), se[1])
+        }
+        for se in file_paths
+    }
 
     return paths_dict

@@ -32,7 +32,6 @@ def write_scp(root_dir: Path, out_path: Path, set_list: list) -> None:
         for se in set_list:
             if os.path.exists(root_dir / f"{se}"):
                 uid_path += find_audios(root_dir / f"{se}")
-        print(uid_path, "UID_PATH")
         for uid, path in uid_path:
             f.write(f"{uid} {path}\n")
 

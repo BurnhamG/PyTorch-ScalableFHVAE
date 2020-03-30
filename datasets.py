@@ -78,7 +78,7 @@ class BaseDataset(Dataset):
         self.rand_seg = rand_seg
 
         self.seqlist = [k for k in feats.keys() if lens[k] >= min_len]
-        self.feat_dict = OrderedDict([(k, feats[k]) for k in self.seqlist])
+        self.feats = OrderedDict([(k, feats[k]) for k in self.seqlist])
         self.lens = OrderedDict([(k, lens[k]) for k in self.seqlist])
 
         self.seq_keys, self.seq_feats, self.seq_lens = self._make_seq_lists(
@@ -207,7 +207,7 @@ class NumpyDataset(BaseDataset):
             feat_scp, len_scp, min_len, mvn_path, seg_len, seg_shift, rand_seg
         )
 
-        self.feats = self.feat_getter(self.feat_dict)
+        self.feats = self.feat_getter(self.feats)
 
     class feat_getter:
         def __init__(self, feats):

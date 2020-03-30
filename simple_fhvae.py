@@ -128,7 +128,7 @@ class LatentSegPreEncoder(nn.Module):
     """
 
     def __init__(self, hus=[1024, 1024]):
-        super().__init()
+        super().__init__()
         self.hus = hus
 
     def forward(self, x, lat_seq):
@@ -150,7 +150,7 @@ class LatentSeqPreEncoder(nn.Module):
     """
 
     def __init__(self, hus=[1024, 1024]):
-        super().__init()
+        super().__init__()
         self.hus = hus
 
     def forward(self, x):
