@@ -64,9 +64,9 @@ def preprocess_data(args):
     else:
         file_keys = ("wav_pth", "feat_ark", "feat_pth", "len_pth")
 
-    for se in file_paths:
         paths_dict = {
             se[0]: {file_id: path for (file_id, path) in zip(file_keys, se[1])}
+            for se in file_paths
         }
 
     return paths_dict
