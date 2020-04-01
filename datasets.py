@@ -6,7 +6,7 @@ import os
 from collections import OrderedDict
 import numpy as np
 import json
-from kaldiio import load_scp
+from kaldiio import load_scp, load_mat
 from pathlib import Path
 
 
@@ -92,9 +92,17 @@ class BaseDataset(Dataset):
         )
         self.seq2idx = dict([(seq, i) for i, seq in enumerate(self.seq_keys)])
 
+    def apply_mvn(self, feats):
+        """Apply mean and variance normalization."""
+        if self.mvn_params is None:
+            return feats
+        else:
+            return (feats - self.mvn_params["mean"]) / self.mvn_params["std"]
+
+    def _mvn_prep(self, mvn_path):
         if mvn_path is not None:
             if not os.path.exists(mvn_path):
-                self.mvn_params = self.compute_mvn()
+                self.mvn_params = self._compute_mvn()
                 with open(mvn_path, "w") as f:
                     json.dump(self.mvn_params, f)
             else:
@@ -103,14 +111,7 @@ class BaseDataset(Dataset):
         else:
             self.mvn_params = None
 
-    def apply_mvn(self, feats):
-        """Apply mean and variance normalization."""
-        if self.mvn_params is None:
-            return feats
-        else:
-            return (feats - self.mvn_params["mean"]) / self.mvn_params["std"]
-
-    def compute_mvn(self):
+    def _compute_mvn(self):
         """Compute mean and variance normalization."""
         n, x, x2 = 0.0, 0.0, 0.0
         for seq in self.seqlist:
@@ -134,13 +135,7 @@ class BaseDataset(Dataset):
 
     def __getitem__(self, index):
         """Returns key(sequence), feature, and number of segments."""
-        seg = self.segs[index]
-        idx = self.seq2idx[seg.seq]
-        key = self.seq_keys[idx]
-        feat = self.seq_feats[idx][seg.start : seg.end]
-        nsegs = self.seq_nsegs[idx]
-
-        return key, feat, nsegs
+        raise NotImplementedError()
 
     def _make_seq_lists(self, seqlist):
         """Return lists of all sequences and the corresponding features and lengths."""
@@ -209,17 +204,7 @@ class NumpyDataset(BaseDataset):
         super().__init__(
             feat_scp, len_scp, min_len, mvn_path, seg_len, seg_shift, rand_seg
         )
-
-        self.feats = self.feat_getter(self.feats)
-
-    class feat_getter:
-        def __init__(self, feats):
-            self.feats = dict(feats)
-
-        def __getitem__(self, seq):
-            with open(self.feats[seq]) as f:
-                feat = np.load(f)
-            return feat
+        self._mvn_prep(mvn_path)
 
     def __getitem__(self, index):
         """Returns key(sequence), feature, and number of segments."""
@@ -228,9 +213,22 @@ class NumpyDataset(BaseDataset):
         key = self.seq_keys[idx]
         with open(self.seq_feats[idx]) as f:
             feat = np.load(f)[seg.start : seg.end]
+        feat = self.apply_mvn(feat)
         nsegs = self.seq_nsegs[idx]
 
         return key, feat, nsegs
+
+    def _compute_mvn(self):
+        """Compute mean and variance normalization."""
+        n, x, x2 = 0.0, 0.0, 0.0
+        for seq in self.seqlist:
+            feat = np.load(self.feats[seq])
+            x += np.sum(feat, axis=0, keepdims=True)
+            x2 += np.sum(feat ** 2, axis=0, keepdims=True)
+            n += feat.shape[0]
+        mean = x / n
+        std = np.sqrt(x2 / n - mean ** 2)
+        return {"mean": mean, "std": std}
 
 
 class KaldiDataset(BaseDataset):
@@ -247,14 +245,27 @@ class KaldiDataset(BaseDataset):
         super().__init__(
             feat_scp, len_scp, min_len, mvn_path, seg_len, seg_shift, rand_seg
         )
-        self.feats = load_scp(f"scp:{feat_scp}")
+        self._mvn_prep(mvn_path)
 
     def __getitem__(self, index):
         """Returns key(sequence), feature, and number of segments."""
         seg = self.segs[index]
         idx = self.seq2idx[seg.seq]
         key = self.seq_keys[idx]
-        feat = self.seq_feats[idx][seg.start : seg.end]
+        feat = load_mat(self.seq_feats[idx])[seg.start : seg.end]
+        feat = self.apply_mvn(feat)
         nsegs = self.seq_nsegs[idx]
 
         return key, feat, nsegs
+
+    def _compute_mvn(self):
+        """Compute mean and variance normalization."""
+        n, x, x2 = 0.0, 0.0, 0.0
+        for seq in self.seqlist:
+            feat = load_mat(self.feats[seq])
+            x += np.sum(feat, axis=0, keepdims=True)
+            x2 += np.sum(feat ** 2, axis=0, keepdims=True)
+            n += feat.shape[0]
+        mean = x / n
+        std = np.sqrt(x2 / n - mean ** 2)
+        return {"mean": mean, "std": std}
