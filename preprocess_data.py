@@ -21,7 +21,9 @@ def preprocess_data(args):
     if args.dataset == "timit":
         paths = process_timit(Path(args.raw_data_dir), dataset_directory)
     else:
-        paths = process_librispeech(Path(args.raw_data_dir), dataset_directory)
+        paths = process_librispeech(
+            Path(args.raw_data_dir), dataset_directory, args.data_format
+        )
 
     starmap_args = []
     if args.data_format == "numpy":
@@ -42,12 +44,8 @@ def preprocess_data(args):
         with Pool(3) as p:
             results: Iterable = p.starmap(prepare_numpy, starmap_args)
     else:
-        for wav_scp in paths:
-            func_args = [
-                str(wav_scp),
-                args.fbank_conf,
-                args.kaldi_root,
-            ]
+        for se, wav_scp in zip(data_sets, paths):
+            func_args = [str(wav_scp), args.fbank_conf, args.kaldi_root, se]
             starmap_args.append(tuple(func_args))
         with Pool(3) as p:
             results = p.starmap(prepare_kaldi, starmap_args)

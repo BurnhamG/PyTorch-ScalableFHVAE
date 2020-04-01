@@ -105,7 +105,7 @@ parser.add_argument("--n-mels", type=int, default=80, help="Number of filter ban
 parser.add_argument(
     "--fbank-conf",
     type=str,
-    default=None,
+    default="./misc/fbank.conf",
     help="Path to the fbank.conf file kaldi should use",
 )
 parser.add_argument(

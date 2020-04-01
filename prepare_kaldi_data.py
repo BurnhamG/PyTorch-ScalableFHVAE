@@ -1,4 +1,5 @@
 import os
+import time
 import argparse
 import subprocess
 from typing import Tuple
@@ -6,7 +7,10 @@ from pathlib import Path
 
 
 def prepare_kaldi(
-    wav_scp: str, fbank_conf: str = "./misc/fbank.conf", kaldi_root: str = "./kaldi",
+    wav_scp: str,
+    fbank_conf: str = "./misc/fbank.conf",
+    kaldi_root: str = "./kaldi",
+    set_name: str = "",
 ) -> Tuple[Path, Path, Path]:
     """Handles Kaldi format feature and script file generation and saving
 
@@ -17,31 +21,49 @@ def prepare_kaldi(
         kaldi_root: Kaldi root directory
 
     """
+    if set_name != "":
+        set_name += ": "
+
     filenames = ("feats.ark", "feats.scp", "len.scp")
 
     file_paths = [os.path.join(os.path.dirname(wav_scp), name) for name in filenames]
-    for path in file_paths:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
 
     feat_ark, feat_scp, len_scp = file_paths
 
     feat_comp_cmd = [
-        os.path.join(kaldi_root, "src/bin/compute-fbank-feats"),
+        os.path.join(kaldi_root, "src/featbin/compute-fbank-feats"),
+        f"--config={fbank_conf}",
         f"scp,p:{wav_scp}",
         f"ark,scp:{feat_ark},{feat_scp}",
-        f"--config={fbank_conf}",
     ]
-    feat_compute = subprocess.Popen(feat_comp_cmd)
+    feat_compute = subprocess.Popen(
+        feat_comp_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    stime = time.time()
+    for i, line in enumerate(feat_compute.stderr):
+        msg = line.decode()
+        # Kaldi only logs every 10 files, so this logs every 200 files
+        if i % 20 == 0 and i > 0:
+            processed_idx = msg.find("Processed")
+            print(
+                f"{set_name.capitalize():7}{' '.join(msg[processed_idx:].split()[1:])} in {time.time() - stime:.2f} seconds"
+            )
 
     # The next operation requires completion of this first command
     feat_compute.wait()
+
+    print(
+        f"{set_name.capitalize()} feature computation completed in {time.time()-stime:.2f} seconds"
+    )
 
     feat_len_cmd = [
         os.path.join(kaldi_root, "src/featbin/feat-to-len"),
         f"scp:{feat_scp}",
         f"ark,t:{len_scp}",
     ]
-    feat_to_len = subprocess.Popen(feat_len_cmd)
+    feat_to_len = subprocess.Popen(
+        feat_len_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
 
     feat_to_len.wait()
 
