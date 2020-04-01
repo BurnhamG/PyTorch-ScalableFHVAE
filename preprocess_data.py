@@ -47,6 +47,7 @@ def preprocess_data(args):
         for se, wav_scp in zip(data_sets, paths):
             func_args = [str(wav_scp), args.fbank_conf, args.kaldi_root, se]
             starmap_args.append(tuple(func_args))
+        files_start_time = time.time()
         with Pool(3) as p:
             results = p.starmap(prepare_kaldi, starmap_args)
 
@@ -54,7 +55,7 @@ def preprocess_data(args):
     # results is a list of tuples of (files_processed, (returned file paths))
     tot_files = sum(r[0] for r in results)
     print(
-        f"Processed {tot_files} files in {files_end_time - files_start_time} seconds."
+        f"Processed {tot_files} files in {files_end_time - files_start_time:.2f} seconds."
     )
 
     file_paths = list(zip(data_sets, [r[1] for r in results]))

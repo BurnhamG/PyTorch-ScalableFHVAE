@@ -30,7 +30,6 @@ def find_audios(dir: Path) -> List[Tuple[str, str]]:
 
 def convert_audios(filelist):
     converted_files = []
-    print(os.getpid())
     list_len = len(filelist)
     stime = time.time()
     for idx, (uid, file) in enumerate(filelist):
