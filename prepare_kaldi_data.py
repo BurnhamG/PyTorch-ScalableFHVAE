@@ -11,7 +11,7 @@ def prepare_kaldi(
     fbank_conf: str = "./misc/fbank.conf",
     kaldi_root: str = "./kaldi",
     set_name: str = "",
-) -> Tuple[Path, Path, Path]:
+) -> Tuple[int, Tuple[Path, Path, Path, Path]]:
     """Handles Kaldi format feature and script file generation and saving
 
 
@@ -40,6 +40,7 @@ def prepare_kaldi(
         feat_comp_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     stime = time.time()
+    count = 0
     for i, line in enumerate(feat_compute.stderr):
         msg = line.decode()
         # Kaldi only logs every 10 files, so this logs every 200 files
@@ -48,6 +49,7 @@ def prepare_kaldi(
             print(
                 f"{set_name.capitalize():7}{' '.join(msg[processed_idx:].split()[1:])} in {time.time() - stime:.2f} seconds"
             )
+        count = i + 1
 
     # The next operation requires completion of this first command
     feat_compute.wait()
@@ -74,7 +76,7 @@ def prepare_kaldi(
             f"{cmd}: {error}" for (cmd, error) in zip(commands, exit_codes) if error > 0
         ]
         raise RuntimeError(f"Non-zero return code(s): {', '.join(error_info)}")
-    return Path(feat_ark), Path(feat_scp), Path(len_scp)
+    return count, (Path(wav_scp), Path(feat_ark), Path(feat_scp), Path(len_scp))
 
 
 if __name__ == "__main__":

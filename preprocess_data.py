@@ -50,17 +50,22 @@ def preprocess_data(args):
         with Pool(3) as p:
             results = p.starmap(prepare_kaldi, starmap_args)
 
-    # results is a list of tuples of (files_processed, (wav_pth, feat_pth, len_pth))
+    files_end_time = time.time()
+    # results is a list of tuples of (files_processed, (returned file paths))
     tot_files = sum(r[0] for r in results)
-    print(f"Processed {tot_files} files in {time.time() - files_start_time} seconds.")
+    print(
+        f"Processed {tot_files} files in {files_end_time - files_start_time} seconds."
+    )
 
     file_paths = list(zip(data_sets, [r[1] for r in results]))
-    paths_dict = {
-        se[0]: {
-            file_id: path
-            for (file_id, path) in zip(("wav_pth", "feat_pth", "len_pth"), se[1])
+    if args.data_format == "numpy":
+        file_keys = ("wav_pth", "feat_pth", "len_pth")
+    else:
+        file_keys = ("wav_pth", "feat_ark", "feat_pth", "len_pth")
+
+    for se in file_paths:
+        paths_dict = {
+            se[0]: {file_id: path for (file_id, path) in zip(file_keys, se[1])}
         }
-        for se in file_paths
-    }
 
     return paths_dict
