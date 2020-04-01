@@ -80,6 +80,9 @@ class BaseDataset(Dataset):
         self.seqlist = [k for k in feats.keys() if lens[k] >= min_len]
         self.feats = OrderedDict([(k, feats[k]) for k in self.seqlist])
         self.lens = OrderedDict([(k, lens[k]) for k in self.seqlist])
+        print(
+            f"{self.__class__.__name__}: {len(self.feats)} out of {len(feats)} kept, min_len = {min_len}"
+        )
 
         self.seq_keys, self.seq_feats, self.seq_lens = self._make_seq_lists(
             self.seqlist
@@ -218,6 +221,17 @@ class NumpyDataset(BaseDataset):
                 feat = np.load(f)
             return feat
 
+    def __getitem__(self, index):
+        """Returns key(sequence), feature, and number of segments."""
+        seg = self.segs[index]
+        idx = self.seq2idx[seg.seq]
+        key = self.seq_keys[idx]
+        with open(self.seq_feats[idx]) as f:
+            feat = np.load(f)[seg.start : seg.end]
+        nsegs = self.seq_nsegs[idx]
+
+        return key, feat, nsegs
+
 
 class KaldiDataset(BaseDataset):
     def __init__(
@@ -234,3 +248,13 @@ class KaldiDataset(BaseDataset):
             feat_scp, len_scp, min_len, mvn_path, seg_len, seg_shift, rand_seg
         )
         self.feats = load_scp(f"scp:{feat_scp}")
+
+    def __getitem__(self, index):
+        """Returns key(sequence), feature, and number of segments."""
+        seg = self.segs[index]
+        idx = self.seq2idx[seg.seq]
+        key = self.seq_keys[idx]
+        feat = self.seq_feats[idx][seg.start : seg.end]
+        nsegs = self.seq_nsegs[idx]
+
+        return key, feat, nsegs
