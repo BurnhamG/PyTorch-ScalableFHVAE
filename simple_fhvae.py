@@ -31,7 +31,7 @@ class SimpleFHVAE(nn.Module):
         self.gauss_layer = GaussianLayer()
         self.pre_decoder = PreDecoder(self.x_hus)
 
-    def mu2_lookup(mu_idx, z2_dim, num_seqs, init_std=1.0):
+    def mu2_lookup(self, mu_idx, z2_dim, num_seqs, init_std=1.0):
         """
         Mu2 posterior mean lookup table
         Args:
@@ -45,7 +45,7 @@ class SimpleFHVAE(nn.Module):
         mu2 = torch.gather(mu2_table, mu_idx)
         return mu2_table, mu2
 
-    def log_gauss(x, mu=0.0, logvar=0.0):
+    def log_gauss(self, x, mu=0.0, logvar=0.0):
         """
         Compute log N(x; mu, exp(logvar))
         """
@@ -53,7 +53,7 @@ class SimpleFHVAE(nn.Module):
             np.log(2 * np.pi) + logvar + torch.pow(x - mu, 2) / torch.exp(logvar)
         )
 
-    def kld(p_mu, p_logvar, q_mu, q_logvar):
+    def kld(self, p_mu, p_logvar, q_mu, q_logvar):
         """
         Compute D_KL(p || q) of two Gaussians
         """
