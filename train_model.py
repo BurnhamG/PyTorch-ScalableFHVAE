@@ -353,13 +353,17 @@ else:
     val_loader = torch.utils.data.DataLoader(
         dev_dataset, batch_size=args.dev_batch_size, shuffle=True, num_workers=4
     )
+    example_data = train_dataset[42][1]
 
+    input_size = np.prod(example_data.shape[1:])
     # load model
     if args.model_type == "fhvae":
-        model = FHVAE(args.z1_hus, args.z2_hus, args.z1_dim, args.z2_dim, args.x_hus)
+        model = FHVAE(
+            input_size, args.z1_hus, args.z2_hus, args.z1_dim, args.z2_dim, args.x_hus
+        )
     else:
         model = SimpleFHVAE(
-            args.z1_hus, args.z2_hus, args.z1_dim, args.z2_dim, args.x_hus
+            input_size, args.z1_hus, args.z2_hus, args.z1_dim, args.z2_dim, args.x_hus
         )
 
     optimizer = Adam(

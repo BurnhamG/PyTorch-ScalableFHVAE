@@ -3,11 +3,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.init import xavier_uniform_
+from typing import List
 
 
 class SimpleFHVAE(nn.Module):
     def __init__(
         self,
+        input_size=None,
         z1_hus=[128, 128],
         z2_hus=[128, 128],
         z1_dim=16,
@@ -30,6 +32,7 @@ class SimpleFHVAE(nn.Module):
         self.z2_pre_encoder = LatentSeqPreEncoder(self.z2_hus)
         self.gauss_layer = GaussianLayer()
         self.pre_decoder = PreDecoder(self.x_hus)
+        self.loss = nn.CrossEntropyLoss()
 
     def mu2_lookup(self, mu_idx, z2_dim, num_seqs, init_std=1.0):
         """
@@ -109,36 +112,45 @@ class SimpleFHVAE(nn.Module):
         lower_bound = log_px_z + neg_kld_z1 + neg_kld_z2 + log_pmu2 / num_segs
 
         # discriminative loss
-        loss = nn.CrossEntropyLoss()
         logits = torch.unsqueeze(self.qz2_x[0], 1) - torch.unsqueeze(self.mu2_table, 0)
         logits = -1 * torch.pow(logits, 2) / (2 * torch.exp(pz2[1]))
         logits = torch.sum(logits, dim=-1)
-        log_qy = loss(input=logits, target=mu_idx)
+        log_qy = self.loss(input=logits, target=mu_idx)
 
         return lower_bound, log_qy, log_px_z, neg_kld_z1, neg_kld_z2, log_pmu2
+
+
+class VariableLinearLayer(nn.Module):
+    def __init__(self, in_dim, out_dim):
+        self.linear = nn.Linear(in_dim, out_dim)
+        self.relu = F.relu()
+
+    def forward(self, x):
+        return self.relu(self.linear(x))
 
 
 class LatentSegPreEncoder(nn.Module):
     """
     Pre-stochastic layer encoder for z1 (latent segment variable)
     Args:
-        x(torch.Tensor): tensor of shape (bs, T, F)
+        x(torch.Tensor): tensor of shape (bs, T, F) (z1)
         lat_seq(torch.Tensor): latent sequence variable (z2)
         hus(list): list of numbers of FC layer hidden units
     Return:
         out(torch.Tensor): last FC layer output
     """
 
-    def __init__(self, hus=[1024, 1024]):
+    def __init__(self, input_size, hus=[1024, 1024]):
         super().__init__()
         self.hus = hus
+        self.fc1 = VariableLinearLayer(input_size, self.hus[0])
+        self.fc2 = VariableLinearLayer(self.hus[0], self.hus[1])
 
     def forward(self, x, lat_seq):
         x = torch.reshape(x, (-1,))
         out = torch.cat([x, lat_seq])
-        for hu in self.hus:
-            out = nn.Linear(np.prod(out.shape[1:]), hu)(out)
-            out = F.relu(out)
+        out = self.fc1(out)
+        out = self.fc2(out)
         return out
 
 
@@ -151,15 +163,17 @@ class LatentSeqPreEncoder(nn.Module):
         out(torch.Tensor): concatenation of hidden states of all LSTM layers
     """
 
-    def __init__(self, hus=[1024, 1024]):
+    def __init__(self, input_size, hus: List[int] = None):
         super().__init__()
-        self.hus = hus
+        if hus is None:
+            hus = [1024, 1024]
+        self.fc1 = VariableLinearLayer(input_size, hus[0])
+        self.fc2 = VariableLinearLayer(hus[0], hus[1])
 
     def forward(self, x):
         out = torch.reshape(x, (-1,))
-        for hu in self.hus:
-            out = nn.Linear(np.prod(out.shape[1:]), hu)(out)
-            out = F.relu(out)
+        out = self.fc1(out)
+        out = self.fc2(out)
         return out
 
 
@@ -171,12 +185,14 @@ class GaussianLayer(nn.Module):
         dim(int): dimension of output latent variables
     """
 
-    def __init__(self):
+    def __init__(self, input_size, dim):
         super().__init__()
+        self.mulayer = nn.Linear(input_size, dim)
+        self.logvar_layer = nn.Linear(input_size, dim)
 
-    def forward(self, input_layer, dim):
-        mu = nn.Linear(np.prod(input_layer.shape[1:]), dim)(input_layer)
-        logvar = nn.Linear(np.prod(input_layer.shape[1:]), dim)(input_layer)
+    def forward(self, input_layer):
+        mu = self.mulayer(input_layer)
+        logvar = self.logvar_layer(input_layer)
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu, logvar, mu + eps * std
@@ -186,18 +202,21 @@ class PreDecoder(nn.Module):
     """
     Pre-stochastic layer decoder
     Args:
-        lat_seg(torch.Tensor): latent segment Tensor (z1)
-        lat_seq(torch.Tensor): latent sequence Tensor (z2)
-        hus(list): list of hidden units per fully-connected layer
+        input_size: Size of input data
+        hus:        List of hidden units per fully-connected layer
+        lat_seg:    Latent segment Tensor (z1)
+        lat_seq:    Latent sequence Tensor (z2)
     """
 
-    def __init__(self, hus=[1024, 1024]):
+    def __init__(self, input_size: int, hus: List[int] = None):
         super().__init__()
-        self.hus = hus
+        if hus is None:
+            hus = [1024, 1024]
+        self.fc1 = VariableLinearLayer(input_size, hus[0])
+        self.fc2 = VariableLinearLayer(hus[0], hus[1])
 
-    def forward(self, lat_seg, lat_seq):
+    def forward(self, lat_seg: torch.Tensor, lat_seq: torch.Tensor):
         out = torch.cat([lat_seg, lat_seq])
-        for hu in self.hus:
-            out = nn.Linear(np.prod(out.shape[1:]), hu)(out)
-            out = F.relu(out)
+        out = self.fc1(out)
+        out = self.fc2(out)
         return out
