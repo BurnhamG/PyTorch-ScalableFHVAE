@@ -34,13 +34,17 @@ class SimpleFHVAE(nn.Module):
         self.pre_decoder = PreDecoder(self.x_hus)
         self.loss = nn.CrossEntropyLoss()
 
-    def mu2_lookup(self, mu_idx, z2_dim, num_seqs, init_std=1.0):
-        """
-        Mu2 posterior mean lookup table
+    def mu2_lookup(
+        self, mu_idx: torch.Tensor, z2_dim: int, num_seqs: int, init_std: float = 1.0
+    ):
+        """Mu2 posterior mean lookup table
+
         Args:
-            mu_idx(torch.Tensor): int tensor of shape (bs,). Index for mu2_table
-            z2_dim(int): z2 dimension
-            num_seqs(int): lookup table size
+            mu_idx:   Int tensor of shape (bs,). Index for mu2_table
+            z2_dim:   Z2 dimension
+            num_seqs: Lookup table size
+            init_std: Standard deviation for lookup table initialization
+
         """
         mu2_table = torch.empty([num_seqs, z2_dim], requires_grad=True).normal_(
             mean=4, std=init_std
@@ -49,17 +53,13 @@ class SimpleFHVAE(nn.Module):
         return mu2_table, mu2
 
     def log_gauss(self, x, mu=0.0, logvar=0.0):
-        """
-        Compute log N(x; mu, exp(logvar))
-        """
+        """Compute log N(x; mu, exp(logvar))"""
         return -0.5 * (
             np.log(2 * np.pi) + logvar + torch.pow(x - mu, 2) / torch.exp(logvar)
         )
 
     def kld(self, p_mu, p_logvar, q_mu, q_logvar):
-        """
-        Compute D_KL(p || q) of two Gaussians
-        """
+        """Compute D_KL(p || q) of two Gaussians"""
         return -0.5 * (
             1
             + p_logvar
@@ -130,23 +130,29 @@ class VariableLinearLayer(nn.Module):
 
 
 class LatentSegPreEncoder(nn.Module):
-    """
-    Pre-stochastic layer encoder for z1 (latent segment variable)
+    """Pre-stochastic layer encoder for z1 (latent segment variable)
+
     Args:
-        x(torch.Tensor): tensor of shape (bs, T, F) (z1)
-        lat_seq(torch.Tensor): latent sequence variable (z2)
-        hus(list): list of numbers of FC layer hidden units
-    Return:
-        out(torch.Tensor): last FC layer output
+        input_size: Size of input to first layer
+        x:          Tensor of shape (bs, T, F) (z1)
+        lat_seq:    Latent sequence variable (z2)
+        hus:        List of numbers of FC layer hidden units
+
+    Returns:
+        out: last FC layer output
+
     """
 
-    def __init__(self, input_size, hus=[1024, 1024]):
+    def __init__(self, input_size: int, hus: List[int] = None):
         super().__init__()
-        self.hus = hus
+        if hus is None:
+            self.hus = [1024, 1024]
+        else:
+            self.hus = hus
         self.fc1 = VariableLinearLayer(input_size, self.hus[0])
         self.fc2 = VariableLinearLayer(self.hus[0], self.hus[1])
 
-    def forward(self, x, lat_seq):
+    def forward(self, x: torch.Tensor, lat_seq: torch.Tensor):
         x = torch.reshape(x, (-1,))
         out = torch.cat([x, lat_seq])
         out = self.fc1(out)
@@ -155,12 +161,15 @@ class LatentSegPreEncoder(nn.Module):
 
 
 class LatentSeqPreEncoder(nn.Module):
-    """
-    Pre-stochastic layer encoder for z2 (latent sequence variable)
+    """Pre-stochastic layer encoder for z2 (latent sequence variable)
+
     Args:
-        hus(list): list of numbers of LSTM layer hidden units
-    Return:
-        out(torch.Tensor): concatenation of hidden states of all LSTM layers
+        input_size: Size of first layer input
+        hus:        List of numbers of layer hidden units
+
+    Returns:
+        out: Concatenation of hidden states of all layers
+
     """
 
     def __init__(self, input_size, hus: List[int] = None):
@@ -178,19 +187,24 @@ class LatentSeqPreEncoder(nn.Module):
 
 
 class GaussianLayer(nn.Module):
-    """
-    Gaussian layer
+    """Gaussian layer
+
     Args:
-        input_layer(torch.Tensor): input layer
-        dim(int): dimension of output latent variables
+        input_size:  Size of input to first layer
+        dim:         Dimension of output latent variables
+        input_layer: Input layer
+
+    Returns:
+        Average, log variance, and a sample from the gaussian
+
     """
 
-    def __init__(self, input_size, dim):
+    def __init__(self, input_size: int, dim: int):
         super().__init__()
         self.mulayer = nn.Linear(input_size, dim)
         self.logvar_layer = nn.Linear(input_size, dim)
 
-    def forward(self, input_layer):
+    def forward(self, input_layer: torch.Tensor):
         mu = self.mulayer(input_layer)
         logvar = self.logvar_layer(input_layer)
         std = torch.exp(0.5 * logvar)
@@ -199,13 +213,17 @@ class GaussianLayer(nn.Module):
 
 
 class PreDecoder(nn.Module):
-    """
-    Pre-stochastic layer decoder
+    """Pre-stochastic layer decoder
+
     Args:
         input_size: Size of input data
         hus:        List of hidden units per fully-connected layer
         lat_seg:    Latent segment Tensor (z1)
         lat_seq:    Latent sequence Tensor (z2)
+
+    Returns:
+        out: Concatenation of hidden states of all layers
+
     """
 
     def __init__(self, input_size: int, hus: List[int] = None):
