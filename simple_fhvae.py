@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.nn.init import xavier_uniform_
 from typing import List
 
@@ -9,7 +8,7 @@ from typing import List
 class SimpleFHVAE(nn.Module):
     def __init__(
         self,
-        input_size=None,
+        input_size,
         z1_hus=[128, 128],
         z2_hus=[128, 128],
         z1_dim=16,
@@ -28,10 +27,11 @@ class SimpleFHVAE(nn.Module):
         self.z1_dim = z1_dim
         self.z2_dim = z2_dim
         self.x_hus = x_hus
-        self.z1_pre_encoder = LatentSegPreEncoder(self.z1_hus)
-        self.z2_pre_encoder = LatentSeqPreEncoder(self.z2_hus)
-        self.gauss_layer = GaussianLayer()
-        self.pre_decoder = PreDecoder(self.x_hus)
+        self.z1_pre_encoder = LatentSegPreEncoder(input_size, self.z1_hus)
+        self.z2_pre_encoder = LatentSeqPreEncoder(input_size, self.z2_hus)
+        self.z1_gauss_layer = GaussianLayer(input_size, self.z1_dim)
+        self.z2_gauss_layer = GaussianLayer(input_size, self.z2_dim)
+        self.pre_decoder = PreDecoder(input_size, self.x_hus)
         self.loss = nn.CrossEntropyLoss()
 
     def mu2_lookup(
@@ -122,8 +122,9 @@ class SimpleFHVAE(nn.Module):
 
 class VariableLinearLayer(nn.Module):
     def __init__(self, in_dim, out_dim):
+        super().__init__()
         self.linear = nn.Linear(in_dim, out_dim)
-        self.relu = F.relu()
+        self.relu = nn.ReLU()
 
     def forward(self, x):
         return self.relu(self.linear(x))
