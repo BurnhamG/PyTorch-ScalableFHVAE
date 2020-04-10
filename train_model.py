@@ -278,6 +278,13 @@ if args.tensorboard:
 
 best_epoch, stert_epoch, best_val_lb = 0, 0, -np.inf
 optim_state = None
+summary_list = None
+
+train_loss_results = {}
+val_loss_results = {}
+lower_bound_results = {}
+discrim_loss_results = {}
+
 # Load a previously saved checkpoint
 if args.continue_from:
     print(f"Loading {args.continue_from}.")
@@ -358,7 +365,7 @@ else:
     )
     example_data = train_dataset[42][1]
 
-    input_size = np.prod(example_data.shape[1:])
+    input_size = np.prod(example_data.shape)
     # load model
     if args.model_type == "fhvae":
         model = FHVAE(
@@ -390,10 +397,10 @@ for epoch in range(start_epoch, args.epochs):
         features = features.to(device)
         idxs = torch.tensor([idx for idx in idxs])
         optimizer.zero_grad()
-        # tr_summ_vars are log_px_z, neg_kld_z1, neg_kld_z2, log_pmu2
-        lower_bound, discrim_loss, tr_summ_vars = model(
+        lower_bound, discrim_loss, log_px_z, neg_kld_z1, neg_kld_z2, log_pmu2 = model(
             features, idxs, len(train_loader.dataset), nsegs
         )
+        tr_summ_vars = (log_px_z, neg_kld_z1, neg_kld_z2, log_pmu2)
         loss = loss_function(lower_bound, discrim_loss, args.alpha_dis)
         loss.backward()
         train_loss += loss.item()
@@ -422,9 +429,10 @@ for epoch in range(start_epoch, args.epochs):
     with torch.no_grad():
         for idx, (key, feature, nsegs) in enumerate(val_loader):
             feature = feature.to(device)
-            val_lower_bound, _, val_summ_vars = model(
+            val_lower_bound, _, log_px_z, neg_kld_z1, neg_kld_z2, log_pmu2 = model(
                 feature, key, len(train_loader.dataset), nsegs
             )
+            val_summ_vars = log_px_z, neg_kld_z1, neg_kld_z2, log_pmu2
             val_loss += loss_function(lower_bound, discrim_loss, args.alpha_dis).item()
             summary_list = [
                 map(torch.sum, summary_list, (val_lower_bound, *val_summ_vars))
@@ -451,7 +459,7 @@ for epoch in range(start_epoch, args.epochs):
                     val_lower_bound,
                     best_val_lb,
                     args.checkpoint_dir,
-                    args.model_dir,
+                    args.best_model_dir,
                 )
 
     val_loss /= len(val_loader.dataset)
@@ -485,7 +493,7 @@ for epoch in range(start_epoch, args.epochs):
         val_lower_bound,
         best_val_lb,
         args.checkpoint_dir,
-        args.model_dir,
+        args.best_model_dir,
     )
 
     print(
