@@ -46,9 +46,9 @@ class SimpleFHVAE(nn.Module):
             init_std: Standard deviation for lookup table initialization
 
         """
-        mu2_table = torch.empty([num_seqs, z2_dim]).normal_(mean=4, std=init_std)
+        mu2_table = torch.empty([num_seqs, z2_dim]).normal_(mean=0, std=init_std)
         mu2_table.requires_grad = True
-        mu2 = torch.gather(mu2_table, mu_idx)
+        mu2 = torch.gather(mu2_table, 0, torch.stack([mu_idx] * 16, 1))
         return mu2_table, mu2
 
     def log_gauss(self, x, mu=0.0, logvar=0.0):
@@ -83,7 +83,7 @@ class SimpleFHVAE(nn.Module):
         """
         mu2_table, mu2 = self.mu2_lookup(mu_idx, self.z2_dim, num_seqs)
         # z2 prior
-        pz2 = [self.mu2, np.log(0.0 ** 2).astype(np.float32)]
+        pz2 = [mu2, np.log(0.0 ** 2).astype(np.float32)]
 
         z2_pre_out = self.z2_pre_encoder(x)
         z2_mu, z2_logvar, z2_sample = self.gauss_layer(z2_pre_out, self.z2_dim)
@@ -126,7 +126,7 @@ class VariableLinearLayer(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, x):
-        return self.relu(self.linear(x))
+        return self.relu(self.linear(x.view(1, -1)))
 
 
 class LatentSegPreEncoder(nn.Module):
