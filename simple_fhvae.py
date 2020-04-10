@@ -46,9 +46,8 @@ class SimpleFHVAE(nn.Module):
             init_std: Standard deviation for lookup table initialization
 
         """
-        mu2_table = torch.empty([num_seqs, z2_dim], requires_grad=True).normal_(
-            mean=4, std=init_std
-        )
+        mu2_table = torch.empty([num_seqs, z2_dim]).normal_(mean=4, std=init_std)
+        mu2_table.requires_grad = True
         mu2 = torch.gather(mu2_table, mu_idx)
         return mu2_table, mu2
 

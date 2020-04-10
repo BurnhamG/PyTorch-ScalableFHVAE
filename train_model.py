@@ -262,6 +262,9 @@ train_loss_results, val_loss_results, lower_bound_results, discrim_loss_results 
     torch.Tensor(args.epochs),
 )
 
+start_epoch = 0
+start_iter = 0
+
 base_string = f"{args.dataset}_{args.data_format}_{args.feat_type}"
 exp_string = f"{args.model_type}_e{args.epochs}_s{args.steps_per_epoch}_p{args.patience}_a{args.alpha_dis}"
 run_id = f"{base_string}_{exp_string}"
@@ -383,22 +386,23 @@ for epoch in range(start_epoch, args.epochs):
     # training
     model.train()
     train_loss = 0.0
-    for batch_idx, data in enumerate(train_loader, start=start_iter):
-        data = data.to(device)
+    for batch_idx, (idxs, features, nsegs) in enumerate(train_loader, start=start_iter):
+        features = features.to(device)
+        idxs = torch.tensor([idx for idx in idxs])
         optimizer.zero_grad()
         # tr_summ_vars are log_px_z, neg_kld_z1, neg_kld_z2, log_pmu2
         lower_bound, discrim_loss, tr_summ_vars = model(
-            *data, len(train_loader.dataset)
+            features, idxs, len(train_loader.dataset), nsegs
         )
         loss = loss_function(lower_bound, discrim_loss, args.alpha_dis)
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
         if batch_idx + 1 % args.log_interval == 0:
-            current_pos = batch_idx * len(data)
+            current_pos = batch_idx * len(features)
             tot_len = len(train_loader.dataset)
             percentage = 100.0 * batch_idx / len(train_loader)
-            cur_loss = loss.item() / len(data)
+            cur_loss = loss.item() / len(features)
 
             print(
                 f"====> Train Epoch: {epoch} [{current_pos}/{tot_len} ({percentage:.0f}%)]\tLoss: {cur_loss:.6f}"
@@ -416,18 +420,20 @@ for epoch in range(start_epoch, args.epochs):
     if summary_list is None:
         summary_list = [0, 0, 0, 0, 0]
     with torch.no_grad():
-        for idx, data in enumerate(val_loader):
-            data = data.to(device)
-            val_lower_bound, _, val_summ_vars = model(*data, len(val_loader.dataset))
+        for idx, (key, feature, nsegs) in enumerate(val_loader):
+            feature = feature.to(device)
+            val_lower_bound, _, val_summ_vars = model(
+                feature, key, len(train_loader.dataset), nsegs
+            )
             val_loss += loss_function(lower_bound, discrim_loss, args.alpha_dis).item()
             summary_list = [
                 map(torch.sum, summary_list, (val_lower_bound, *val_summ_vars))
             ]
             if idx + 1 % args.log_interval == 0:
-                current_pos = batch_idx * len(data)
+                current_pos = batch_idx * len(feature)
                 tot_len = len(val_loader.dataset)
                 percentage = 100.0 * batch_idx / len(val_loader)
-                cur_loss = loss.item() / len(data)
+                cur_loss = loss.item() / len(feature)
 
                 print(
                     f"====> Validation Epoch: {epoch} [{current_pos}/{tot_len} ({percentage:.0f}%)]\tLoss: {cur_loss:.6f}"

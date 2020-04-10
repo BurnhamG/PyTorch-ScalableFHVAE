@@ -210,13 +210,12 @@ class NumpyDataset(BaseDataset):
         """Returns key(sequence), feature, and number of segments."""
         seg = self.segs[index]
         idx = self.seq2idx[seg.seq]
-        key = self.seq_keys[idx]
         with open(self.seq_feats[idx]) as f:
             feat = np.load(f)[seg.start : seg.end]
         feat = self.apply_mvn(feat)
         nsegs = self.seq_nsegs[idx]
 
-        return key, feat, nsegs
+        return idx, feat, nsegs
 
     def _compute_mvn(self):
         """Compute mean and variance normalization."""
@@ -251,12 +250,11 @@ class KaldiDataset(BaseDataset):
         """Returns key(sequence), feature, and number of segments."""
         seg = self.segs[index]
         idx = self.seq2idx[seg.seq]
-        key = self.seq_keys[idx]
         feat = load_mat(self.seq_feats[idx])[seg.start : seg.end]
         feat = self.apply_mvn(feat)
         nsegs = self.seq_nsegs[idx]
 
-        return key, feat, nsegs
+        return idx, feat, nsegs
 
     def _compute_mvn(self):
         """Compute mean and variance normalization."""
