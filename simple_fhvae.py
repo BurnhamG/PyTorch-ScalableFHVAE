@@ -16,6 +16,7 @@ class SimpleFHVAE(nn.Module):
         x_hus=[128, 128],
     ):
         super().__init__()
+        self.model = "simple_fhvae"
 
         # priors
         self.pz1 = [0.0, np.log(1.0 ** 2).astype(np.float32)]
@@ -102,12 +103,16 @@ class SimpleFHVAE(nn.Module):
         px_z = [x_mu, x_logvar]
 
         # variational lower bound
-        log_pmu2 = torch.sum(self.log_gauss(mu2.detach(), self.pmu2[0], self.pmu2[1]), dim=1)
+        log_pmu2 = torch.sum(
+            self.log_gauss(mu2.detach(), self.pmu2[0], self.pmu2[1]), dim=1
+        )
         neg_kld_z2 = -1 * torch.sum(self.kld(qz2_x[0], qz2_x[1], pz2[0], pz2[1]), dim=1)
         neg_kld_z1 = -1 * torch.sum(
             self.kld(qz1_x[0], qz1_x[1], self.pz1[0], self.pz1[1]), dim=1
         )
-        log_px_z = torch.sum(self.log_gauss(x, px_z[0].detach(), px_z[1].detach()), dim=(1, 2))
+        log_px_z = torch.sum(
+            self.log_gauss(x, px_z[0].detach(), px_z[1].detach()), dim=(1, 2)
+        )
         lower_bound = log_px_z + neg_kld_z1 + neg_kld_z2 + log_pmu2 / num_segs
 
         # discriminative loss

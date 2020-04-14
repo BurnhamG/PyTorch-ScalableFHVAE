@@ -61,7 +61,7 @@ parser.add_argument(
     "--log-interval", type=int, default=200, help="Step interval for printing info",
 )
 parser.add_argument(
-    "--checkpoint_interval",
+    "--checkpoint-interval",
     type=int,
     default=200,
     help="Number of steps to save checkpoints",
@@ -481,7 +481,7 @@ for epoch in range(start_epoch, args.epochs):
         visdom_logger.update(epoch, values)
 
     # Iteration is None here so we know this was saved at the end of an epoch
-    save_checkpoint(
+    is_best = save_checkpoint(
         model,
         optimizer,
         args,
@@ -495,6 +495,8 @@ for epoch in range(start_epoch, args.epochs):
         args.checkpoint_dir,
         args.best_model_dir,
     )
+    if is_best:
+        best_epoch = epoch
 
     print(
         f"====> Epoch: {epoch} Average loss: {train_loss / len(train_loader.dataset):.4f}"

@@ -96,8 +96,6 @@ def save_checkpoint(
     best_model_path: str,
 ):
     """Saves checkpoint files"""
-    if val_lower_bound > best_val_lb:
-        is_best = True
 
     checkpoint = {
         "args": args,
@@ -117,10 +115,12 @@ def save_checkpoint(
         "values": values_dict,
     }
 
-    f_path = Path(checkpoint_dir) / f"{model}_{run_info}_e{epoch}_i{iteration}.tar"
+    f_path = Path(checkpoint_dir) / f"{model.model}_{run_info}_e{epoch}_i{iteration}.tar"
     torch.save(checkpoint, f_path)
-    if is_best:
+    if torch.mean(val_lower_bound) > best_val_lb:
         shutil.copyfile(f_path, Path(best_model_path))
+        return True
+    return False
 
 
 class AudioUtils:
