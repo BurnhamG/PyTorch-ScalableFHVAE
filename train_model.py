@@ -506,3 +506,5 @@ for epoch in range(start_epoch, args.epochs):
         print("Training terminated!")
         break
     summary_list = None
+
+print("Training complete!")
