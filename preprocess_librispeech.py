@@ -90,6 +90,8 @@ def process_librispeech(
         test_list:    Test sets to process
 
     """
+    print("Generating scp files...")
+
     set_names = ("train", "dev", "test")
 
     # avoid mutable default args
@@ -105,7 +107,6 @@ def process_librispeech(
     for scp, subset_list, set_name in zip(
         [train_scp, dev_scp, test_scp], [train_list, dev_list, test_list], set_names
     ):
-        print(f"{set_name.capitalize()}:")
         write_scp(raw_data_dir, scp, subset_list, data_format)
 
     print("Generated scp files")
