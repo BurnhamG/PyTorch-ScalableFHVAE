@@ -52,21 +52,6 @@ parser.add_argument(
     help="Number of maximum consecutive non-improving epochs",
 )
 parser.add_argument(
-    "--steps-per-epoch",
-    type=int,
-    default=5000,
-    help="Number of training steps per epoch",
-)
-parser.add_argument(
-    "--log-interval", type=int, default=200, help="Step interval for printing info",
-)
-parser.add_argument(
-    "--checkpoint-interval",
-    type=int,
-    default=200,
-    help="Number of steps to save checkpoints",
-)
-parser.add_argument(
     "--preprocessed",
     action="store_true",
     dest="is_preprocessed",
@@ -101,7 +86,7 @@ parser.add_argument(
     default=0.010,
     help="Window stride for spectrogram in seconds",
 )
-parser.add_argument("--n-mels", type=int, default=80, help="Number of filter banks")
+parser.add_argument("--mels", type=int, default=80, help="Number of filter banks")
 parser.add_argument(
     "--fbank-conf",
     type=str,
@@ -145,7 +130,7 @@ parser.add_argument(
 parser.add_argument(
     "--dev-batch-size",
     type=int,
-    default=256,
+    default=2048,
     help="Batch size to use for evaluation against the development set",
 )
 parser.add_argument(
@@ -215,6 +200,32 @@ parser.add_argument(
     dest="finetune",
     action="store_true",
     help="Fine-tune the model from the provided checkpoint",
+)
+
+legacy_opts = parser.add_argument_group(
+    "Legacy options",
+    "These options can be used to emulate behavior from the original papers more closely.",
+)
+legacy_opts.add_argument(
+    "--legacy",
+    dest="legacy",
+    action="store_true",
+    help="Override 'standard' options with provided legacy options",
+)
+legacy_opts.add_argument(
+    "--steps-per-epoch",
+    type=int,
+    default=5000,
+    help="Number of training steps per epoch",
+)
+legacy_opts.add_argument(
+    "--log-interval", type=int, default=200, help="Step interval for printing info",
+)
+legacy_opts.add_argument(
+    "--checkpoint-interval",
+    type=int,
+    default=200,
+    help="Number of steps to save checkpoints",
 )
 args = parser.parse_args()
 print(args)
