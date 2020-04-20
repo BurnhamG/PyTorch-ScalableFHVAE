@@ -11,7 +11,7 @@ def process_timit(
     output_dir: Path,
     dev_spk_path: str = "./misc/timit_dev_spk.list",
     test_spk_path: str = "./misc/timit_test_spk.list",
-) -> Tuple[Path, Path, Path]:
+):
     """Generates .scp files for the TIMIT dataset
 
     Args:

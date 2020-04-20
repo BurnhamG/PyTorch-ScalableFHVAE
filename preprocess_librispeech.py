@@ -80,7 +80,7 @@ def process_librispeech(
     train_list: list = None,
     dev_list: list = None,
     test_list: list = None,
-) -> Tuple[Path, Path, Path]:
+):
     """Generates .scp files for the Librispeech dataset
 
     Args:
