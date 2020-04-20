@@ -26,14 +26,16 @@ def prepare_kaldi(
     filenames = ("feats.ark", "feats.scp", "len.scp")
     set_dir = Path(dataset_dir) / set_name
 
-    file_paths = [os.path.join(set_dir, name) for name in filenames]
+    file_paths = [set_dir / name for name in filenames]
+
+    wav_scp_path = set_dir / "wav.scp"
 
     feat_ark, feat_scp, len_scp = file_paths
 
     feat_comp_cmd = [
         os.path.join(kaldi_root, "src/featbin/compute-fbank-feats"),
         f"--config={fbank_conf}",
-        f"scp,p:{set_dir}",
+        f"scp,p:{wav_scp_path}",
         f"ark,scp:{feat_ark},{feat_scp}",
     ]
     feat_compute = subprocess.Popen(
