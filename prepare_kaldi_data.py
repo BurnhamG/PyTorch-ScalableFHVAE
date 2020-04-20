@@ -30,6 +30,9 @@ def prepare_kaldi(
 
     wav_scp_path = set_dir / "wav.scp"
 
+    # count files
+    count = sum(1 for i in open(wav_scp_path, 'rb'))
+
     feat_ark, feat_scp, len_scp = file_paths
 
     feat_comp_cmd = [
@@ -42,7 +45,6 @@ def prepare_kaldi(
         feat_comp_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     stime = time.time()
-    count = 0
     for i, line in enumerate(feat_compute.stderr):
         msg = line.decode()
         # Kaldi only logs every 10 files, so this logs every 200 files
@@ -51,7 +53,6 @@ def prepare_kaldi(
             print(
                 f"{set_name.capitalize():7}{' '.join(msg[processed_idx:].split()[1:])} in {time.time() - stime:.2f} seconds"
             )
-        count = i + 1
 
     # The next operation requires completion of this first command
     feat_compute.wait()
