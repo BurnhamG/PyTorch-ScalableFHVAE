@@ -20,10 +20,10 @@ def preprocess_data(args):
 
     # paths is (training_wav_scp, dev_wav_scp, test_wav_scp)
     if args.dataset == "timit":
-        process_timit(Path(args.raw_data_dir), dataset_directory)
+        process_timit(Path(args.raw_data_dir).resolve(), dataset_directory)
     else:
         process_librispeech(
-            Path(args.raw_data_dir), dataset_directory, args.data_format
+            Path(args.raw_data_dir).resolve(), dataset_directory, args.data_format
         )
 
     starmap_args = []
