@@ -53,8 +53,8 @@ def generate_feat(
 def prepare_numpy(
     dataset: str,
     set_name: str,
-    wav_scp: str,
-    output_dir: Path = None,
+    dataset_dir: str,
+    output_dir: str = None,
     ftype: str = "fbank",
     sample_rate: int = None,
     win_t: float = 0.025,
@@ -63,12 +63,12 @@ def prepare_numpy(
 ) -> Tuple[int, Tuple[Path, Path, Path]]:
     """Handles Numpy format feature and script file generation and saving
 
-    If wav.scp does not exist, an error will be raised.
+    If dataset_dir does not exist, an error will be raised.
 
     Args:
         dataset:     Name of the dataset for which features are generated
         set_name:    Name of the set (train, dev, test) to operate on
-        wav_scp:     Input wav.scp file
+        dataset_dir: Directory containing subdirectories with wav.scp files
         output_dir:  Directory to write to
         ftype:       Type of computed feature
         sample_rate: Sample rate for resampling if not None
@@ -79,9 +79,9 @@ def prepare_numpy(
     """
 
     if output_dir is not None:
-        set_path = Path(output_dir / set_name)
+        set_path = Path(output_dir) / set_name
     else:
-        raise ValueError()
+        set_path = Path(dataset_dir) / set_name
 
     file_paths = []
     for name in ("wav.scp", "feats.scp", "len.scp"):
@@ -119,7 +119,9 @@ def prepare_numpy(
             lenfile.write(f"{seq} {len(feat)}\n")
             count = i + 1
             if (count) % 1000 == 0:
-                print(f"{count} {set_name} files in {time.time() - start_time} seconds.")
+                print(
+                    f"{count} {set_name} files in {time.time() - start_time} seconds."
+                )
 
     print(
         f"Processed {count} files in {set_name} set over {time.time() - start_time} seconds."
@@ -131,8 +133,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("wav_scp", type=str, help="Input wav scp file")
-    parser.add_argument("np_dir", type=str, help="Output directory for numpy matrices")
+    parser.add_argument(
+        "dataset_dir",
+        type=str,
+        help="Directory containing subdirectories with wav.scp files",
+    )
+    parser.add_argument(
+        "--np_dir", type=str, default=None, help="Output directory for numpy matrices"
+    )
     parser.add_argument(
         "--dataset",
         type=str,
@@ -177,7 +185,7 @@ if __name__ == "__main__":
     func_args = [
         args.dataset,
         args.set_name,
-        args.wav_scp,
+        args.dataset_dir,
         args.np_dir,
         args.ftype,
         args.sr,
@@ -197,7 +205,7 @@ if __name__ == "__main__":
             results = p.starmap(prepare_numpy, starmap_args)
 
         print(
-            f"Processed {sum(results)} files in {time.time() - files_start_time} seconds."
+            f"Processed {sum(r[0] for r in results)} files in {time.time() - files_start_time} seconds."
         )
     else:
         prepare_numpy(*func_args)
