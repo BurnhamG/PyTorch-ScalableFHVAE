@@ -54,22 +54,23 @@ def write_scp(
         for se in subset_list:
             if os.path.exists(root_dir / f"{se}"):
                 uid_path += find_audios(root_dir / f"{se}")
-            if data_format == "kaldi":
-                n = math.ceil(len(uid_path) / 8)
-                uid_path_lists = (
-                    uid_path[i : i + n] for i in range(0, len(uid_path), n)
-                )
-                print(f"Converting {len(uid_path)} utterances to .wav for Kaldi")
-                with Pool(8) as p:
-                    results = p.imap(convert_audios, uid_path_lists)
-                    uid_path = sorted(
-                        list(itertools.chain.from_iterable(results)), key=lambda x: x[0]
+                if data_format == "kaldi":
+                    n = math.ceil(len(uid_path) / 8)
+                    uid_path_lists = (
+                        uid_path[i : i + n] for i in range(0, len(uid_path), n)
                     )
-                for uid, path in uid_path:
-                    f.write(f"{uid} {path.replace('.flac','.wav')}\n")
-            else:
-                for uid, path in uid_path:
-                    f.write(f"{uid} {path}\n")
+                    print(f"Converting {len(uid_path)} utterances to .wav for Kaldi")
+                    with Pool(8) as p:
+                        results = p.imap(convert_audios, uid_path_lists)
+                        uid_path = sorted(
+                            list(itertools.chain.from_iterable(results)),
+                            key=lambda x: x[0],
+                        )
+                    for uid, path in uid_path:
+                        f.write(f"{uid} {path.replace('.flac','.wav')}\n")
+                else:
+                    for uid, path in uid_path:
+                        f.write(f"{uid} {path}\n")
 
 
 def process_librispeech(
@@ -119,6 +120,13 @@ if __name__ == "__main__":
     parser.add_argument("raw_data_dir", type=str, help="LibriSpeech raw data directory")
     parser.add_argument("output_dir", type=str, help="Directory for data output")
     parser.add_argument(
+        "--data-format",
+        type=str,
+        default="numpy",
+        choices=["numpy", "kaldi"],
+        help="Data format to use",
+    )
+    parser.add_argument(
         "--train_list",
         type=str,
         nargs="*",
@@ -145,6 +153,7 @@ if __name__ == "__main__":
     process_librispeech(
         Path(args.raw_data_dir),
         Path(args.output_dir),
+        args.data_format,
         args.train_list,
         args.dev_list,
         args.test_list,
