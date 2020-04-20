@@ -4,36 +4,36 @@ import argparse
 import subprocess
 from typing import Tuple
 from pathlib import Path
+from multiprocessing.pool import Pool
 
 
 def prepare_kaldi(
-    wav_scp: str,
+    dataset_dir: str,
+    set_name: str,
     fbank_conf: str = "./misc/fbank.conf",
     kaldi_root: str = "./kaldi",
-    set_name: str = "",
 ) -> Tuple[int, Tuple[Path, Path, Path, Path]]:
     """Handles Kaldi format feature and script file generation and saving
 
 
     Args:
-        wav_scp:    Input wav.scp file
-        fbank_conf: Location of the fbank.conf file for Kaldi to use in feature computation
-        kaldi_root: Kaldi root directory
+        dataset_dir: Directory containing subdirectories with wav.scp files
+        set_name:    Name of the set (train, dev, test) to operate on
+        fbank_conf:  Location of the fbank.conf file for Kaldi to use in feature computation
+        kaldi_root:  Kaldi root directory
 
     """
-    if set_name != "":
-        set_name += ": "
-
     filenames = ("feats.ark", "feats.scp", "len.scp")
+    set_dir = Path(dataset_dir) / set_name
 
-    file_paths = [os.path.join(os.path.dirname(wav_scp), name) for name in filenames]
+    file_paths = [os.path.join(set_dir, name) for name in filenames]
 
     feat_ark, feat_scp, len_scp = file_paths
 
     feat_comp_cmd = [
         os.path.join(kaldi_root, "src/featbin/compute-fbank-feats"),
         f"--config={fbank_conf}",
-        f"scp,p:{wav_scp}",
+        f"scp,p:{set_dir}",
         f"ark,scp:{feat_ark},{feat_scp}",
     ]
     feat_compute = subprocess.Popen(
@@ -76,14 +76,18 @@ def prepare_kaldi(
             f"{cmd}: {error}" for (cmd, error) in zip(commands, exit_codes) if error > 0
         ]
         raise RuntimeError(f"Non-zero return code(s): {', '.join(error_info)}")
-    return count, (Path(wav_scp), Path(feat_ark), Path(feat_scp), Path(len_scp))
+    return count, (Path(dataset_dir), Path(feat_ark), Path(feat_scp), Path(len_scp))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("wav_scp", type=str, help="Input wav scp file")
+    parser.add_argument(
+        "dataset_dir",
+        type=str,
+        help="Directory containing subdirectories with wav.scp files",
+    )
     parser.add_argument(
         "--fbank_conf",
         type=str,
@@ -93,9 +97,31 @@ if __name__ == "__main__":
     parser.add_argument(
         "--kaldi_root", type=str, default="./kaldi", help="Kaldi root directory",
     )
+    parser.add_argument(
+        "--set_name",
+        type=str,
+        default=None,
+        help="Set {train, dev, test} to operate on. Leave blank for all three",
+    )
     args = parser.parse_args()
     print(args)
 
-    prepare_kaldi(
-        args.wav_scp, args.fbank_conf, args.kaldi_root,
-    )
+    func_args = [args.dataset_dir, args.set_name, args.fbank_conf, args.kaldi_root]
+    # Parallel run if set_name is unspecified
+    if args.set_name is None:
+        starmap_args = []
+        for s in ["train", "dev", "test"]:
+            func_args[1] = s
+            starmap_args.append(tuple(func_args))
+
+        files_start_time = time.time()
+        with Pool(3) as p:
+            results = p.starmap(prepare_kaldi, starmap_args)
+
+        print(
+            f"Processed {sum(r[0] for r in results)} files in {time.time() - files_start_time} seconds."
+        )
+    else:
+        prepare_kaldi(
+            args.dataset_dir, args.set_name, args.fbank_conf, args.kaldi_root,
+        )

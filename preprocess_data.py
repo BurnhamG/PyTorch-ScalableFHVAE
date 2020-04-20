@@ -8,6 +8,7 @@ from prepare_kaldi_data import prepare_kaldi
 import time
 from multiprocessing import Pool
 from typing import Iterable
+import argparse
 
 
 def preprocess_data(args):
@@ -19,33 +20,33 @@ def preprocess_data(args):
 
     # paths is (training_wav_scp, dev_wav_scp, test_wav_scp)
     if args.dataset == "timit":
-        paths = process_timit(Path(args.raw_data_dir), dataset_directory)
+        process_timit(Path(args.raw_data_dir), dataset_directory)
     else:
-        paths = process_librispeech(
+        process_librispeech(
             Path(args.raw_data_dir), dataset_directory, args.data_format
         )
 
     starmap_args = []
     if args.data_format == "numpy":
-        for set_name, wav_scp in zip(data_sets, paths):
+        for set_name in data_sets:
             func_args = [
                 args.dataset,
                 set_name,
-                wav_scp,
                 dataset_directory,
+                None,
                 args.feat_type,
                 args.sample_rate,
                 args.win_size,
                 args.hop_size,
-                args.n_mels,
+                args.mels,
             ]
             starmap_args.append(tuple(func_args))
         files_start_time = time.time()
         with Pool(3) as p:
             results: Iterable = p.starmap(prepare_numpy, starmap_args)
     else:
-        for se, wav_scp in zip(data_sets, paths):
-            func_args = [str(wav_scp), args.fbank_conf, args.kaldi_root, se]
+        for set_name in data_sets:
+            func_args = [dataset_directory, set_name, args.fbank_conf, args.kaldi_root]
             starmap_args.append(tuple(func_args))
         files_start_time = time.time()
         with Pool(3) as p:
@@ -70,3 +71,57 @@ def preprocess_data(args):
         }
 
     return paths_dict
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        "dataset",
+        type=str,
+        choices=["librispeech", "timit"],
+        help="Dataset to preprocess",
+    )
+    parser.add_argument("raw-data-dir", type=str, help="Location for raw data")
+    parser.add_argument(
+        "--data-format",
+        type=str,
+        default="numpy",
+        choices=["numpy", "kaldi"],
+        help="Data format to use for precomputed features",
+    )
+    parser.add_argument(
+        "--fbank-conf",
+        type=str,
+        default="./misc/fbank.conf",
+        help="Kaldi fbank configuration",
+    )
+    parser.add_argument(
+        "--feat-type",
+        type=str,
+        default="fbank",
+        choices=["fbank", "spec"],
+        help="Feature type to compute (only affects numpy data)",
+    )
+    parser.add_argument(
+        "--hop-size", type=float, default=0.010, help="Frame spacing in seconds"
+    )
+    parser.add_argument(
+        "--kaldi-root", type=str, default="./kaldi", help="Kaldi root directory"
+    )
+    parser.add_argument(
+        "--mels", type=int, default=80, help="Number of filter banks if choosing fbank",
+    )
+    parser.add_argument(
+        "--sample-rate",
+        type=int,
+        default=None,
+        help="Resample raw audio to specified value if not None",
+    )
+    parser.add_argument(
+        "--win-size", type=float, default=0.025, help="Window size in seconds"
+    )
+    args = parser.parse_args()
+
+    preprocess_data(args)

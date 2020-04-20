@@ -65,8 +65,6 @@ def process_timit(
 
     print("Converted to wav and dumped .scp files")
 
-    return train_scp, dev_scp, test_scp
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
