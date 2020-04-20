@@ -83,7 +83,7 @@ if __name__ == "__main__":
         choices=["librispeech", "timit"],
         help="Dataset to preprocess",
     )
-    parser.add_argument("raw-data-dir", type=str, help="Location for raw data")
+    parser.add_argument("raw_data_dir", type=str, help="Location for raw data")
     parser.add_argument(
         "--data-format",
         type=str,
