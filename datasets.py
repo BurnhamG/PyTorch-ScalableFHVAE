@@ -210,7 +210,7 @@ class NumpyDataset(BaseDataset):
         """Returns key(sequence), feature, and number of segments."""
         seg = self.segs[index]
         idx = self.seq2idx[seg.seq]
-        with open(self.seq_feats[idx]) as f:
+        with open(self.seq_feats[idx], 'rb') as f:
             feat = np.load(f)[seg.start : seg.end]
         feat = self.apply_mvn(feat)
         nsegs = self.seq_nsegs[idx]
