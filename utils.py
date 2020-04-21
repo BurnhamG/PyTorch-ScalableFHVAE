@@ -9,6 +9,18 @@ import shutil
 from typing import Optional
 
 
+def create_training_strings(args):
+    base_string = create_output_dir(args.dataset, args.data_format, args.feat_type)
+    if args.legacy:
+        exp_string = f"{args.model_type}_e{args.epochs}_s{args.steps_per_epoch}_p{args.patience}_a{args.alpha_dis}_legacy"
+    else:
+        exp_string = (
+            f"{args.model_type}_e{args.epochs}_p{args.patience}_a{args.alpha_dis}"
+        )
+    run_id = f"{base_string}_{exp_string}"
+    return base_string, exp_string, run_id
+
+
 def create_output_dir(dataset: str, data_format: str, feat_type: str) -> Path:
     """Concatenates the dataset name, format, and feature type to create a dir name"""
     if data_format.lower() == "numpy":
@@ -115,7 +127,9 @@ def save_checkpoint(
         "values": values_dict,
     }
 
-    f_path = Path(checkpoint_dir) / f"{model.model}_{run_info}_e{epoch}_i{iteration}.tar"
+    f_path = (
+        Path(checkpoint_dir) / f"{model.model}_{run_info}_e{epoch}_i{iteration}.tar"
+    )
     torch.save(checkpoint, f_path)
     if torch.mean(val_lower_bound) > best_val_lb:
         shutil.copyfile(f_path, Path(best_model_path))

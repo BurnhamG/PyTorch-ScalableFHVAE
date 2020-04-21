@@ -11,7 +11,7 @@ from torch.optim import Adam
 from logger import VisdomLogger, TensorBoardLogger
 import numpy as np
 from datasets import NumpyDataset, KaldiDataset
-from utils import load_checkpoint_file, save_checkpoint
+from utils import load_checkpoint_file, save_checkpoint, create_training_strings
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--dataset", type=str, help="Dataset to use")
@@ -276,13 +276,7 @@ train_loss_results, val_loss_results, lower_bound_results, discrim_loss_results 
 start_epoch = 0
 start_iter = 0
 
-base_string = create_output_dir(args.dataset, args.data_format, args.feat_type)
-if args.legacy:
-    exp_string = f"{args.model_type}_e{args.epochs}_s{args.steps_per_epoch}_p{args.patience}_a{args.alpha_dis}_legacy"
-else:
-    exp_string = f"{args.model_type}_e{args.epochs}_p{args.patience}_a{args.alpha_dis}"
-run_id = f"{base_string}_{exp_string}"
-
+base_string, exp_string, run_id = create_training_strings(args)
 os.makedirs(args.checkpoint_dir, exist_ok=True)
 
 if args.visdom:
@@ -311,9 +305,7 @@ if args.continue_from:
         start_iter,
         summary_list,
     ) = load_checkpoint_file(args)
-    base_string = f"{args.dataset}_{args.data_format}_{args.feat_type}"
-    exp_string = f"{args.model_type}_e{args.epochs}_s{args.steps_per_epoch}_p{args.patience}_a{args.alpha_dis}"
-    run_id = f"{base_string}_{exp_string}"
+    base_string, exp_string, run_id = create_training_strings(saved_args)
 
     # Load previous values into loggers
     if args.visdom:
