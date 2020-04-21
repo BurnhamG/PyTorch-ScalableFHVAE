@@ -276,8 +276,11 @@ train_loss_results, val_loss_results, lower_bound_results, discrim_loss_results 
 start_epoch = 0
 start_iter = 0
 
-base_string = f"{args.dataset}_{args.data_format}_{args.feat_type}"
-exp_string = f"{args.model_type}_e{args.epochs}_s{args.steps_per_epoch}_p{args.patience}_a{args.alpha_dis}"
+base_string = create_output_dir(args.dataset, args.data_format, args.feat_type)
+if args.legacy:
+    exp_string = f"{args.model_type}_e{args.epochs}_s{args.steps_per_epoch}_p{args.patience}_a{args.alpha_dis}_legacy"
+else:
+    exp_string = f"{args.model_type}_e{args.epochs}_p{args.patience}_a{args.alpha_dis}"
 run_id = f"{base_string}_{exp_string}"
 
 os.makedirs(args.checkpoint_dir, exist_ok=True)
@@ -342,7 +345,7 @@ else:
             args.rand_seg,
         ]
     else:
-        dataset_dir = create_output_dir(args.dataset, args.feat_type, args.data_format)
+        dataset_dir = create_output_dir(args.dataset, args.data_format, args.feat_type)
         train_dataset_args = [
             dataset_dir / "train" / "feats.scp",
             dataset_dir / "train" / "len.scp",

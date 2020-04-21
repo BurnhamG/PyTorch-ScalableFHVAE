@@ -9,7 +9,7 @@ import shutil
 from typing import Optional
 
 
-def create_output_dir(dataset: str, feat_type: str, data_format: str) -> Path:
+def create_output_dir(dataset: str, data_format: str, feat_type: str) -> Path:
     """Concatenates the dataset name, format, and feature type to create a dir name"""
     if data_format.lower() == "numpy":
         dataset += "_np"

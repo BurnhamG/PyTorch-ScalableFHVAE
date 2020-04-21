@@ -15,7 +15,7 @@ def preprocess_data(args):
     data_sets = ("train", "dev", "test")
     # load data
     dataset_directory = create_output_dir(
-        args.dataset, args.feat_type, args.data_format
+        args.dataset, args.data_format, args.feat_type
     )
 
     # paths is (training_wav_scp, dev_wav_scp, test_wav_scp)
