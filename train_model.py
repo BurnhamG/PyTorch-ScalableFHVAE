@@ -170,7 +170,7 @@ parser.add_argument(
     "--visdom", action="store_true", dest="visdom", help="Enable Visdom logging"
 )
 parser.add_argument(
-    "--log-dir", default="./visualize/tensorboard", help="Location of tensorboard log",
+    "--tb-log-dir", default="./visualize/tensorboard", help="Location of tensorboard log",
 )
 parser.add_argument(
     "--log-params",
@@ -282,7 +282,7 @@ os.makedirs(args.checkpoint_dir, exist_ok=True)
 if args.visdom:
     visdom_logger = VisdomLogger(run_id, args.epochs)
 if args.tensorboard:
-    tensorboard_logger = TensorBoardLogger(run_id, args.log_dir, args.log_params)
+    tensorboard_logger = TensorBoardLogger(run_id, args.tb_log_dir, args.log_params)
 
 best_epoch, stert_epoch, best_val_lb = 0, 0, -np.inf
 optim_state = None
@@ -305,14 +305,14 @@ if args.continue_from:
         start_iter,
         summary_list,
     ) = load_checkpoint_file(args)
-    base_string, exp_string, run_id = create_training_strings(saved_args)
+    base_string, exp_string, run_id = create_training_strings(args)
 
     # Load previous values into loggers
     if args.visdom:
         visdom_logger = VisdomLogger(run_id, args.epochs)
         visdom_logger.load_previous_values(start_epoch, values)
     if args.tensorboard:
-        tensorboard_logger = TensorBoardLogger(run_id, args.log_dir, args.log_params)
+        tensorboard_logger = TensorBoardLogger(run_id, args.tb_log_dir, args.log_params)
         tensorboard_logger.load_previous_values(start_epoch, values)
 else:
     # Starting fresh
