@@ -170,7 +170,9 @@ parser.add_argument(
     "--visdom", action="store_true", dest="visdom", help="Enable Visdom logging"
 )
 parser.add_argument(
-    "--tb-log-dir", default="./visualize/tensorboard", help="Location of tensorboard log",
+    "--tb-log-dir",
+    default="./visualize/tensorboard",
+    help="Location of tensorboard log",
 )
 parser.add_argument(
     "--log-params",
@@ -363,12 +365,23 @@ else:
         train_dataset = KaldiDataset(*train_dataset_args)
         dev_dataset = KaldiDataset(*dev_dataset_args)
 
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.training_batch_size, shuffle=True, num_workers=4
-    )
-    val_loader = torch.utils.data.DataLoader(
-        dev_dataset, batch_size=args.dev_batch_size, shuffle=True, num_workers=4
-    )
+    if args.legacy:
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=1, shuffle=True, num_workers=4
+        )
+        val_loader = torch.utils.data.DataLoader(
+            dev_dataset, batch_size=1, shuffle=True, num_workers=4
+        )
+    else:
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset,
+            batch_size=args.training_batch_size,
+            shuffle=True,
+            num_workers=4,
+        )
+        val_loader = torch.utils.data.DataLoader(
+            dev_dataset, batch_size=args.dev_batch_size, shuffle=True, num_workers=4
+        )
     example_data = train_dataset[42][1]
 
     input_size = np.prod(example_data.shape)
@@ -411,7 +424,7 @@ for epoch in range(start_epoch, args.epochs):
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
-        if batch_idx + 1 % args.log_interval == 0:
+        if args.legacy and batch_idx + 1 % args.log_interval == 0:
             current_pos = batch_idx * len(features)
             tot_len = len(train_loader.dataset)
             percentage = 100.0 * batch_idx / len(train_loader)
@@ -420,9 +433,11 @@ for epoch in range(start_epoch, args.epochs):
             print(
                 f"====> Train Epoch: {epoch} [{current_pos}/{tot_len} ({percentage:.0f}%)]\tLoss: {cur_loss:.6f}"
             )
-            if np.isnan(lower_bound):
-                print("Training diverged")
-                raise sys.exit(2)
+        if np.isnan(lower_bound):
+            print("Training diverged")
+            raise sys.exit(2)
+        if args.legacy and batch_idx + 1 % args.steps_per_epoch == 0:
+            break
 
     train_loss /= len(train_loader.dataset)
     print(f"====> Train set average loss: {train_loss:.4f}")
@@ -443,7 +458,7 @@ for epoch in range(start_epoch, args.epochs):
             summary_list = [
                 map(torch.sum, summary_list, (val_lower_bound, *val_summ_vars))
             ]
-            if idx + 1 % args.log_interval == 0:
+            if args.legacy and idx + 1 % args.log_interval == 0:
                 current_pos = batch_idx * len(feature)
                 tot_len = len(val_loader.dataset)
                 percentage = 100.0 * batch_idx / len(val_loader)
@@ -452,21 +467,21 @@ for epoch in range(start_epoch, args.epochs):
                 print(
                     f"====> Validation Epoch: {epoch} [{current_pos}/{tot_len} ({percentage:.0f}%)]\tLoss: {cur_loss:.6f}"
                 )
-            if idx + 1 % args.checkpoint_interval == 0:
-                save_checkpoint(
-                    model,
-                    optimizer,
-                    args,
-                    summary_list,
-                    None,
-                    base_string,
-                    epoch,
-                    idx,
-                    val_lower_bound,
-                    best_val_lb,
-                    args.checkpoint_dir,
-                    args.best_model_dir,
-                )
+        if args.legacy and batch_idx + 1 % args.checkpoint_interval == 0:
+            save_checkpoint(
+                model,
+                optimizer,
+                args,
+                summary_list,
+                None,
+                base_string,
+                epoch,
+                idx,
+                val_lower_bound,
+                best_val_lb,
+                args.checkpoint_dir,
+                args.best_model_dir,
+            )
 
     val_loss /= len(val_loader.dataset)
     print(f"====> Validation set loss: {val_loss:.4f}")
