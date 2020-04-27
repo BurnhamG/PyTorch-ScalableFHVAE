@@ -58,14 +58,11 @@ def load_checkpoint_file(args):
     # We don't want to restart training if this is the case
     if not args.finetune:
         optim_state = checkpoint["optimizer"]
-        start_epoch = checkpoint["epoch"]
+        # Checkpoint was saved at the end of an epoch, start from next epoch
+        start_epoch = checkpoint["epoch"] + 1
         best_val_lb = checkpoint["best_val_lb"]
-        start_iter = checkpoint.get("iteration", None)
         summary_list = checkpoint["summary_vals"]
-        if start_iter is None:
-            # Checkpoint was saved at the end of an epoch, start from next epoch
-            start_epoch += 1
-            start_iter = 0
+        start_epoch += 1
         values = checkpoint["values"]
         attrs = [
             "feat_type",
@@ -83,7 +80,6 @@ def load_checkpoint_file(args):
             "log_dir",
             "log_params",
             "checkpoint_dir",
-            "best_model_dir",
         ]
         for attr in attrs:
             vars(args)[attr] = vars(checkpoint["args"])[attr]
@@ -94,7 +90,6 @@ def load_checkpoint_file(args):
         optim_state,
         start_epoch,
         best_val_lb,
-        start_iter,
         summary_list,
     )
 
@@ -107,10 +102,10 @@ def save_checkpoint(
     values_dict,
     run_info: str,
     epoch: int,
+    best_epoch: int,
     val_lower_bound: float,
     best_val_lb: float,
     checkpoint_dir: str,
-    best_model_path: str,
 ) -> None:
     """Saves checkpoint files"""
 
@@ -131,10 +126,11 @@ def save_checkpoint(
         "values": values_dict,
     }
 
-    f_path = Path(checkpoint_dir) / f"{model.model}_{run_info}_e{epoch}.tar"
+    f_str = f"{model.model}_{run_info}_e{epoch}"
+    f_path = Path(checkpoint_dir) / f"{f_str}.tar"
     torch.save(checkpoint, f_path)
-    if check_best(val_lower_bound, best_val_lb):
-        shutil.copyfile(f_path, Path(best_model_path))
+    if best_epoch == epoch:
+        shutil.copyfile(f_path, Path(checkpoint_dir) / f"best_model_{f_str}.pth")
 
 
 class AudioUtils:

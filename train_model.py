@@ -186,14 +186,7 @@ parser.add_argument(
     help="Log parameter values and gradients",
 )
 parser.add_argument(
-    "--continue-from",
-    type=str,
-    help="Checkpoint model for continuing training",
-)
-parser.add_argument(
-    "--best-model-dir",
-    default="./best_model.pth",
-    help="Location to save the best epoch models",
+    "--continue-from", type=str, help="Checkpoint model for continuing training",
 )
 parser.add_argument(
     "--finetune",
@@ -274,7 +267,6 @@ train_loss_results, val_loss_results, lower_bound_results, discrim_loss_results 
 )
 
 start_epoch = 0
-start_iter = 0
 
 base_string, exp_string, run_id = create_training_strings(args)
 
@@ -301,7 +293,6 @@ if args.continue_from:
         optim_state,
         start_epoch,
         best_val_lb,
-        start_iter,
         summary_list,
     ) = load_checkpoint_file(args)
     base_string, exp_string, run_id = create_training_strings(args)
@@ -409,7 +400,7 @@ for epoch in range(start_epoch, args.epochs):
     # training
     model.train()
     train_loss = 0.0
-    for batch_idx, (idxs, features, nsegs) in enumerate(train_loader, start=start_iter):
+    for batch_idx, (idxs, features, nsegs) in enumerate(train_loader):
         features = features.to(device)
         idxs = torch.tensor([idx for idx in idxs])
         optimizer.zero_grad()
@@ -482,6 +473,9 @@ for epoch in range(start_epoch, args.epochs):
     if args.visdom:
         visdom_logger.update(epoch, values)
 
+    if check_best(val_lower_bound, best_val_lb):
+        best_epoch = epoch
+
     save_checkpoint(
         model,
         optimizer,
@@ -490,13 +484,11 @@ for epoch in range(start_epoch, args.epochs):
         values,
         base_string,
         epoch,
+        best_epoch,
         val_lower_bound,
         best_val_lb,
         exp_dir,
-        args.best_model_dir,
     )
-    if check_best(val_lower_bound, best_val_lb):
-        best_epoch = epoch
 
     print(
         f"====> Epoch: {epoch} Average loss: {train_loss / len(train_loader.dataset):.4f}"
