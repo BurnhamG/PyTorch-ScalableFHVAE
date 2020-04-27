@@ -214,12 +214,6 @@ legacy_opts.add_argument(
 legacy_opts.add_argument(
     "--log-interval", type=int, default=200, help="Step interval for printing info",
 )
-legacy_opts.add_argument(
-    "--checkpoint-interval",
-    type=int,
-    default=200,
-    help="Number of steps to save checkpoints",
-)
 args = parser.parse_args()
 print(args)
 
