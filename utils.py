@@ -9,6 +9,12 @@ import shutil
 from typing import Optional
 
 
+def check_best(val_lower_bound, best_val_lb) -> bool:
+    if torch.mean(val_lower_bound) > best_val_lb:
+        return True
+    return False
+
+
 def create_training_strings(args):
     base_string = create_output_dir(args.dataset, args.data_format, args.feat_type)
     if args.legacy:
@@ -101,19 +107,17 @@ def save_checkpoint(
     values_dict,
     run_info: str,
     epoch: int,
-    iteration: Optional[int],
     val_lower_bound: float,
     best_val_lb: float,
     checkpoint_dir: str,
     best_model_path: str,
-):
+) -> None:
     """Saves checkpoint files"""
 
     checkpoint = {
         "args": args,
         "best_val_lb": best_val_lb,
         "epoch": epoch,
-        "iteration": iteration,
         "model_params": (
             model.z1_hus,
             model.z2_hus,
@@ -127,14 +131,10 @@ def save_checkpoint(
         "values": values_dict,
     }
 
-    f_path = (
-        Path(checkpoint_dir) / f"{model.model}_{run_info}_e{epoch}_i{iteration}.tar"
-    )
+    f_path = Path(checkpoint_dir) / f"{model.model}_{run_info}_e{epoch}.tar"
     torch.save(checkpoint, f_path)
-    if torch.mean(val_lower_bound) > best_val_lb:
+    if check_best(val_lower_bound, best_val_lb):
         shutil.copyfile(f_path, Path(best_model_path))
-        return True
-    return False
 
 
 class AudioUtils:

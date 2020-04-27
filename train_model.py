@@ -11,7 +11,12 @@ from torch.optim import Adam
 from logger import VisdomLogger, TensorBoardLogger
 import numpy as np
 from datasets import NumpyDataset, KaldiDataset
-from utils import load_checkpoint_file, save_checkpoint, create_training_strings
+from utils import (
+    load_checkpoint_file,
+    save_checkpoint,
+    create_training_strings,
+    check_best,
+)
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--dataset", type=str, help="Dataset to use")
@@ -448,7 +453,7 @@ for epoch in range(start_epoch, args.epochs):
     if summary_list is None:
         summary_list = [0, 0, 0, 0, 0]
     with torch.no_grad():
-        for idx, (key, feature, nsegs) in enumerate(val_loader):
+        for (key, feature, nsegs) in val_loader:
             feature = feature.to(device)
             val_lower_bound, _, log_px_z, neg_kld_z1, neg_kld_z2, log_pmu2 = model(
                 feature, key, len(train_loader.dataset), nsegs
@@ -458,29 +463,13 @@ for epoch in range(start_epoch, args.epochs):
             summary_list = [
                 map(torch.sum, summary_list, (val_lower_bound, *val_summ_vars))
             ]
-            if args.legacy and idx + 1 % args.log_interval == 0:
-                current_pos = batch_idx * len(feature)
-                tot_len = len(val_loader.dataset)
-                percentage = 100.0 * batch_idx / len(val_loader)
-                cur_loss = loss.item() / len(feature)
+            current_pos = batch_idx * len(feature)
+            tot_len = len(val_loader.dataset)
+            percentage = 100.0 * batch_idx / len(val_loader)
+            cur_loss = loss.item() / len(feature)
 
-                print(
-                    f"====> Validation Epoch: {epoch} [{current_pos}/{tot_len} ({percentage:.0f}%)]\tLoss: {cur_loss:.6f}"
-                )
-        if args.legacy and batch_idx + 1 % args.checkpoint_interval == 0:
-            save_checkpoint(
-                model,
-                optimizer,
-                args,
-                summary_list,
-                None,
-                base_string,
-                epoch,
-                idx,
-                val_lower_bound,
-                best_val_lb,
-                args.checkpoint_dir,
-                args.best_model_dir,
+            print(
+                f"====> Validation Epoch: {epoch} [{current_pos}/{tot_len} ({percentage:.0f}%)]\tLoss: {cur_loss:.6f}"
             )
 
     val_loss /= len(val_loader.dataset)
@@ -501,8 +490,7 @@ for epoch in range(start_epoch, args.epochs):
     if args.visdom:
         visdom_logger.update(epoch, values)
 
-    # Iteration is None here so we know this was saved at the end of an epoch
-    is_best = save_checkpoint(
+    save_checkpoint(
         model,
         optimizer,
         args,
@@ -510,13 +498,12 @@ for epoch in range(start_epoch, args.epochs):
         values,
         base_string,
         epoch,
-        None,
         val_lower_bound,
         best_val_lb,
         args.checkpoint_dir,
         args.best_model_dir,
     )
-    if is_best:
+    if check_best(val_lower_bound, best_val_lb):
         best_epoch = epoch
 
     print(
