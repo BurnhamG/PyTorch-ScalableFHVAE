@@ -186,20 +186,13 @@ parser.add_argument(
     help="Log parameter values and gradients",
 )
 parser.add_argument(
-    "--checkpoint-dir",
-    default="./models",
-    type=str,
-    help="Directory that will hold the model checkpoints",
-)
-parser.add_argument(
     "--continue-from",
-    default="",
     type=str,
     help="Checkpoint model for continuing training",
 )
 parser.add_argument(
     "--best-model-dir",
-    default="./models/best_model.pth",
+    default="./best_model.pth",
     help="Location to save the best epoch models",
 )
 parser.add_argument(
@@ -284,7 +277,6 @@ start_epoch = 0
 start_iter = 0
 
 base_string, exp_string, run_id = create_training_strings(args)
-os.makedirs(args.checkpoint_dir, exist_ok=True)
 
 if args.visdom:
     visdom_logger = VisdomLogger(run_id, args.epochs)
@@ -500,7 +492,7 @@ for epoch in range(start_epoch, args.epochs):
         epoch,
         val_lower_bound,
         best_val_lb,
-        args.checkpoint_dir,
+        exp_dir,
         args.best_model_dir,
     )
     if check_best(val_lower_bound, best_val_lb):
