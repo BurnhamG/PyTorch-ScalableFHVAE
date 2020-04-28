@@ -16,6 +16,8 @@ from utils import (
     save_checkpoint,
     create_training_strings,
     check_best,
+    save_args,
+    load_args,
 )
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -282,13 +284,13 @@ discrim_loss_results = {}
 if args.continue_from:
     print(f"Loading {args.continue_from}.")
     (
-        args,
         values,
         optim_state,
         start_epoch,
         best_val_lb,
         summary_list,
-    ) = load_checkpoint_file(args)
+    ) = load_checkpoint_file(args.continue_from, args.finetune, args.model_type)
+    args = load_args(os.path.dirname(args.continue_from))
     base_string, exp_string, run_id = create_training_strings(args)
 
     # Load previous values into loggers
@@ -390,6 +392,8 @@ exp_root = Path("./experiments") / base_string
 exp_dir = exp_root / exp_string
 os.makedirs(exp_dir, exist_ok=True)
 
+save_args(exp_dir, args)
+
 for epoch in range(start_epoch, args.epochs):
     # training
     model.train()
@@ -473,7 +477,6 @@ for epoch in range(start_epoch, args.epochs):
     save_checkpoint(
         model,
         optimizer,
-        args,
         summary_list,
         values,
         base_string,

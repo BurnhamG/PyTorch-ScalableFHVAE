@@ -7,6 +7,7 @@ from simple_fhvae import SimpleFHVAE
 from fhvae import FHVAE
 import shutil
 from typing import Optional
+import pickle
 
 
 def check_best(val_lower_bound, best_val_lb) -> bool:
@@ -40,10 +41,10 @@ def create_output_dir(dataset: str, data_format: str, feat_type: str) -> Path:
     return Path(dataset + f"_{feat_type}")
 
 
-def load_checkpoint_file(args):
+def load_checkpoint_file(checkpoint_file, finetune, model_type):
     strict_mode = True
-    checkpoint = torch.load(args.continue_from)
-    model_type = checkpoint["args"].model_type
+    checkpoint = torch.load(checkpoint_file)
+    model_type = checkpoint["model_type"]
     model_params = checkpoint["model_params"]
     if model_type == "fhvae":
         model = FHVAE(*model_params)
@@ -51,12 +52,12 @@ def load_checkpoint_file(args):
         model = SimpleFHVAE(*model_params)
     else:
         # Fallback just in case
-        model = args.model_type
+        model = model_type
         strict_mode = False
     model.load_state_dict(checkpoint["state_dict"], strict=strict_mode)
 
     # We don't want to restart training if this is the case
-    if not args.finetune:
+    if not finetune:
         optim_state = checkpoint["optimizer"]
         # Checkpoint was saved at the end of an epoch, start from next epoch
         start_epoch = checkpoint["epoch"] + 1
@@ -64,28 +65,8 @@ def load_checkpoint_file(args):
         summary_list = checkpoint["summary_vals"]
         start_epoch += 1
         values = checkpoint["values"]
-        attrs = [
-            "feat_type",
-            "data_format",
-            "alpha_dis",
-            "epochs",
-            "patience",
-            "steps_per_epoch",
-            "log_interval",
-            "checkpoint_interval",
-            "training_batch_size",
-            "dev_batch_size",
-            "tensorboard",
-            "visdom",
-            "log_dir",
-            "log_params",
-            "checkpoint_dir",
-        ]
-        for attr in attrs:
-            vars(args)[attr] = vars(checkpoint["args"])[attr]
 
     return (
-        args,
         values,
         optim_state,
         start_epoch,
@@ -94,10 +75,20 @@ def load_checkpoint_file(args):
     )
 
 
+def save_args(exp_dir, args):
+    with open(f"{exp_dir}/args.pkl", "wb") as f:
+        pickle.dump(args, f)
+
+
+def load_args(exp_dir):
+    with open(f"{exp_dir}/args.pkl", "rb") as f:
+        args = pickle.load(f)
+    return args
+
+
 def save_checkpoint(
     model,
     optimizer,
-    args,
     summary_list,
     values_dict,
     run_info: str,
@@ -110,9 +101,9 @@ def save_checkpoint(
     """Saves checkpoint files"""
 
     checkpoint = {
-        "args": args,
         "best_val_lb": best_val_lb,
         "epoch": epoch,
+        "model_type": model.model,
         "model_params": (
             model.z1_hus,
             model.z2_hus,
