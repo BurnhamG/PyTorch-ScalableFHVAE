@@ -17,7 +17,7 @@ def check_best(val_lower_bound, best_val_lb) -> bool:
 
 
 def create_training_strings(args):
-    base_string = create_output_dir(args.dataset, args.data_format, args.feat_type)
+    base_string = create_output_dir_name(args.dataset, args.data_format, args.feat_type)
     if args.legacy:
         exp_string = f"{args.model_type}_e{args.epochs}_s{args.steps_per_epoch}_p{args.patience}_a{args.alpha_dis}_legacy"
     else:
@@ -28,7 +28,7 @@ def create_training_strings(args):
     return base_string, exp_string, run_id
 
 
-def create_output_dir(dataset: str, data_format: str, feat_type: str) -> Path:
+def create_output_dir_name(dataset: str, data_format: str, feat_type: str) -> Path:
     """Concatenates the dataset name, format, and feature type to create a dir name"""
     if data_format.lower() == "numpy":
         dataset += "_np"
@@ -67,6 +67,7 @@ def load_checkpoint_file(checkpoint_file, finetune, model_type):
         values = checkpoint["values"]
 
     return (
+        model,
         values,
         optim_state,
         start_epoch,

@@ -284,6 +284,7 @@ discrim_loss_results = {}
 if args.continue_from:
     print(f"Loading {args.continue_from}.")
     (
+        model,
         values,
         optim_state,
         start_epoch,
