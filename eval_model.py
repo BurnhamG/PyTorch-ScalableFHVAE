@@ -3,8 +3,9 @@ import sys
 import time
 import argparse
 import torch
-from utils import load_args, create_training_strings
+from utils import load_args, create_training_strings, load_checkpoint_file
 from loggers import VisdomLogger, TensorBoardLogger
+from pathlib import Path
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("exp_dir", type=str, help="Experiment directory")
@@ -45,3 +46,10 @@ if args.visdom:
     visdom_logger = VisdomLogger(run_id, loaded_args.epochs)
 if args.tensorboard:
     tensorboard_logger = TensorBoardLogger(run_id, args.tb_log_dir, args.log_params)
+
+if args.step == -1:
+    checkpoint_file = list(Path(args.exp_dir).glob("best_model*.tar"))[0]
+else:
+    checkpoint_file = sorted(Path(args.exp_dir).glob("*_*_e*.tar"))[args.step]
+
+model = load_checkpoint_file(checkpoint_file, True)[0]
