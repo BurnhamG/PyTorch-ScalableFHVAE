@@ -110,6 +110,7 @@ def save_checkpoint(
 
     checkpoint = {
         "best_val_lb": best_val_lb,
+        "best_epoch": best_epoch,
         "epoch": epoch,
         "model_type": model.model,
         "model_params": (
