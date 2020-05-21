@@ -290,7 +290,7 @@ if args.continue_from:
         start_epoch,
         best_val_lb,
         summary_list,
-    ) = load_checkpoint_file(args.continue_from, args.finetune, args.model_type)
+    ) = load_checkpoint_file(args.continue_from, args.finetune)
     args = load_args(os.path.dirname(args.continue_from))
     base_string, exp_string, run_id = create_training_strings(args)
 

@@ -41,7 +41,13 @@ def create_output_dir_name(dataset: str, data_format: str, feat_type: str) -> Pa
     return Path(dataset + f"_{feat_type}")
 
 
-def load_checkpoint_file(checkpoint_file, finetune, model_type):
+def load_checkpoint_file(checkpoint_file, finetune):
+    optim_state = None
+    start_epoch = None
+    best_val_lb = None
+    summary_list = None
+    values = None
+
     strict_mode = True
     checkpoint = torch.load(checkpoint_file)
     model_type = checkpoint["model_type"]
@@ -52,6 +58,7 @@ def load_checkpoint_file(checkpoint_file, finetune, model_type):
         model = SimpleFHVAE(*model_params)
     else:
         # Fallback just in case
+        print(f"NON-STANDARD MODEL TYPE {model_type} DETECTED")
         model = model_type
         strict_mode = False
     model.load_state_dict(checkpoint["state_dict"], strict=strict_mode)
@@ -122,7 +129,7 @@ def save_checkpoint(
     f_path = Path(checkpoint_dir) / f"{f_str}.tar"
     torch.save(checkpoint, f_path)
     if best_epoch == epoch:
-        shutil.copyfile(f_path, Path(checkpoint_dir) / f"best_model_{f_str}.pth")
+        shutil.copyfile(f_path, Path(checkpoint_dir) / f"best_model_{f_str}.tar")
 
 
 class AudioUtils:
