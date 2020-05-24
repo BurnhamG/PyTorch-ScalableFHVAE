@@ -1,6 +1,7 @@
 import sys
 from utils import create_output_dir
 from preprocess_data import preprocess_data
+from collections import defaultdict
 import argparse
 import os
 import torch
@@ -195,6 +196,18 @@ parser.add_argument(
     dest="finetune",
     action="store_true",
     help="Fine-tune the model from the provided checkpoint",
+)
+parser.add_argument(
+    "--hierarchical",
+    action="store_true",
+    dest="sample_hierarchical",
+    help="Use hierarchical sampling method",
+)
+parser.add_argument(
+    "--num-hierarchical-sequences",
+    type=int,
+    default=5000,
+    help="Number of sequences for hierarchical sampling",
 )
 
 legacy_opts = parser.add_argument_group(
@@ -394,6 +407,15 @@ exp_dir = exp_root / exp_string
 os.makedirs(exp_dir, exist_ok=True)
 
 save_args(exp_dir, args)
+
+if args.sample_hierarchical:
+    s_seqs = np.random.choice(
+        train_loader.dataset.seqlist, args.num_hierarchical_sequences, replace=False
+    )
+
+    # estimate mu2 dict
+    nseg_table = defaultdict(float)
+    z2_sum_table = defaultdict(float)
 
 for epoch in range(start_epoch, args.epochs):
     # training
