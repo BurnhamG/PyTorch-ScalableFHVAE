@@ -1,4 +1,5 @@
 import librosa
+from collections import defaultdict
 import numpy as np
 from nptyping import Array
 from pathlib import Path
@@ -39,6 +40,21 @@ def create_output_dir_name(dataset: str, data_format: str, feat_type: str) -> Pa
     feat_type = "fbank" if data_format == "kaldi" else feat_type
 
     return Path(dataset + f"_{feat_type}")
+
+
+def estimate_mu2_dict(model, loader, num_seqs):
+    """Estimate mu2 for sequences"""
+    model.eval()
+    nseg_table = defaultdict(float)
+    z2_sum_table = defaultdict(float)
+    for idx, (seq, _, _) in enumerate(loader):
+        z2 = model(seq).qz2_x[0]
+        for _y, _z2 in zip(y_val, z2):
+            z2_sum_table[_y] += _z2
+            nseg_table[_y] += 1
+    mu2_dict = dict()
+    # for _y in nseg_table:
+    #     nu2_dict[_y] =
 
 
 def load_checkpoint_file(checkpoint_file, finetune):

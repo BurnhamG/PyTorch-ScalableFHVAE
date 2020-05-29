@@ -57,6 +57,7 @@ class BaseDataset(Dataset):
         seg_len: int = 20,
         seg_shift: int = 8,
         rand_seg: bool = False,
+        sequence_list=None,
     ):
         """
         Args:
@@ -77,7 +78,11 @@ class BaseDataset(Dataset):
         self.seg_shift = seg_shift
         self.rand_seg = rand_seg
 
-        self.seqlist = [k for k in feats.keys() if lens[k] >= min_len]
+        if sequence_list is not None:
+            self.seqlist = sequence_list
+        else:
+            self.seqlist = [k for k in feats.keys() if lens[k] >= min_len]
+
         self.feats = OrderedDict([(k, feats[k]) for k in self.seqlist])
         self.lens = OrderedDict([(k, lens[k]) for k in self.seqlist])
         print(
@@ -210,7 +215,7 @@ class NumpyDataset(BaseDataset):
         """Returns key(sequence), feature, and number of segments."""
         seg = self.segs[index]
         idx = self.seq2idx[seg.seq]
-        with open(self.seq_feats[idx], 'rb') as f:
+        with open(self.seq_feats[idx], "rb") as f:
             feat = np.load(f)[seg.start : seg.end]
         feat = self.apply_mvn(feat)
         nsegs = self.seq_nsegs[idx]

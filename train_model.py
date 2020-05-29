@@ -19,6 +19,7 @@ from utils import (
     check_best,
     save_args,
     load_args,
+    estimate_mu2_dict,
 )
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -380,6 +381,8 @@ else:
         val_loader = torch.utils.data.DataLoader(
             dev_dataset, batch_size=args.dev_batch_size, shuffle=True, num_workers=4
         )
+    est_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=1, shuffle=False, num_workers=4
     example_data = train_dataset[42][1]
 
     input_size = np.prod(example_data.shape)
@@ -409,13 +412,11 @@ os.makedirs(exp_dir, exist_ok=True)
 save_args(exp_dir, args)
 
 if args.sample_hierarchical:
-    s_seqs = np.random.choice(
-        train_loader.dataset.seqlist, args.num_hierarchical_sequences, replace=False
-    )
-
     # estimate mu2 dict
-    nseg_table = defaultdict(float)
-    z2_sum_table = defaultdict(float)
+    sampled_seqs = np.random.choice(loader.dataset.seqlist, num_seqs, replace=False)
+    # hierarchical_dataset = Dataset(feat_scp,len_scp,sampled_seqs)
+    # hierarchical_loader = torch.utils.DataLoader(hierarchical_dataset, batch_size=1,shuffle=True)
+    estimate_mu2_dict(model, hierarchical_loader, args.num_hierarchical_sequences)
 
 for epoch in range(start_epoch, args.epochs):
     # training
