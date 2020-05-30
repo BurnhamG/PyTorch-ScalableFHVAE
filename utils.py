@@ -47,14 +47,16 @@ def estimate_mu2_dict(model, loader, num_seqs):
     model.eval()
     nseg_table = defaultdict(float)
     z2_sum_table = defaultdict(float)
-    for idx, (seq, _, _) in enumerate(loader):
-        z2 = model(seq).qz2_x[0]
-        for _y, _z2 in zip(y_val, z2):
+    for _, (idxs, features, nsegs) in enumerate(loader):
+        z2 = model(features, idxs, len(loader.dataset), nsegs).qz2_x[0]
+        for _y, _z2 in zip(idxs, z2):
             z2_sum_table[_y] += _z2
             nseg_table[_y] += 1
     mu2_dict = dict()
-    # for _y in nseg_table:
-    #     nu2_dict[_y] =
+    for _y in nseg_table:
+        r = np.exp(model.pz2[1]) / np.exp(model.pmu2[1])
+        mu2_dict[_y] = z2_sum_table[_y] / (nseg_table[_y] + r)
+    return mu2_dict
 
 
 def load_checkpoint_file(checkpoint_file, finetune):
