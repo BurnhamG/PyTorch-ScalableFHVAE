@@ -48,7 +48,8 @@ def estimate_mu2_dict(model, loader, num_seqs):
     nseg_table = defaultdict(float)
     z2_sum_table = defaultdict(float)
     for _, (idxs, features, nsegs) in enumerate(loader):
-        z2 = model(features, idxs, len(loader.dataset), nsegs).qz2_x[0]
+        model(features, idxs, len(loader.dataset), nsegs)
+        z2 = model.qz2_x[0]
         for _y, _z2 in zip(idxs, z2):
             z2_sum_table[_y] += _z2
             nseg_table[_y] += 1

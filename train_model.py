@@ -319,9 +319,11 @@ else:
     # Starting fresh
     if not args.is_preprocessed:
         paths_dict = preprocess_data(args)
+        train_feat_scp = paths_dict["train"]["feat_pth"]
+        train_len_scp = paths_dict["train"]["len_pth"]
         train_dataset_args = [
-            paths_dict["train"]["feat_pth"],
-            paths_dict["train"]["len_pth"],
+            train_feat_scp,
+            train_len_scp,
             args.min_len,
             args.mvn_path,
             args.seg_len,
@@ -339,9 +341,11 @@ else:
         ]
     else:
         dataset_dir = create_output_dir(args.dataset, args.data_format, args.feat_type)
+        train_feat_scp = dataset_dir / "train" / "feats.scp"
+        train_len_scp = dataset_dir / "train" / "len.scp"
         train_dataset_args = [
-            dataset_dir / "train" / "feats.scp",
-            dataset_dir / "train" / "len.scp",
+            train_feat_scp,
+            train_len_scp,
             args.min_len,
             args.mvn_path,
             args.seg_len,
@@ -358,11 +362,12 @@ else:
             args.rand_seg,
         ]
     if args.data_format == "numpy":
-        train_dataset = NumpyDataset(*train_dataset_args)
-        dev_dataset = NumpyDataset(*dev_dataset_args)
+        Dataset = NumpyDataset
     else:
-        train_dataset = KaldiDataset(*train_dataset_args)
-        dev_dataset = KaldiDataset(*dev_dataset_args)
+        Dataset = KaldiDataset
+
+    train_dataset = Dataset(*train_dataset_args)
+    dev_dataset = Dataset(*dev_dataset_args)
 
     if args.legacy:
         train_loader = torch.utils.data.DataLoader(
@@ -381,8 +386,6 @@ else:
         val_loader = torch.utils.data.DataLoader(
             dev_dataset, batch_size=args.dev_batch_size, shuffle=True, num_workers=4
         )
-    est_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=1, shuffle=False, num_workers=4
     example_data = train_dataset[42][1]
 
     input_size = np.prod(example_data.shape)
@@ -413,9 +416,13 @@ save_args(exp_dir, args)
 
 if args.sample_hierarchical:
     # estimate mu2 dict
-    sampled_seqs = np.random.choice(loader.dataset.seqlist, num_seqs, replace=False)
-    # hierarchical_dataset = Dataset(feat_scp,len_scp,sampled_seqs)
-    # hierarchical_loader = torch.utils.DataLoader(hierarchical_dataset, batch_size=1,shuffle=True)
+    sampled_seqs = np.random.choice(
+        train_loader.dataset.seqlist, args.num_hierarchical_sequences, replace=False
+    )
+    hierarchical_dataset = Dataset(train_feat_scp, train_len_scp, sampled_seqs)
+    hierarchical_loader = torch.utils.DataLoader(
+        hierarchical_dataset, batch_size=1, shuffle=True, num_workers=4
+    )
     estimate_mu2_dict(model, hierarchical_loader, args.num_hierarchical_sequences)
 
 for epoch in range(start_epoch, args.epochs):
