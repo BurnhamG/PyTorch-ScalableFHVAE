@@ -1,5 +1,5 @@
 import sys
-from utils import create_output_dir
+from utils import create_output_dir_name
 from preprocess_data import preprocess_data
 from collections import defaultdict
 import argparse
@@ -340,7 +340,7 @@ else:
             args.rand_seg,
         ]
     else:
-        dataset_dir = create_output_dir(args.dataset, args.data_format, args.feat_type)
+        dataset_dir = create_output_dir_name(args.dataset, args.data_format, args.feat_type)
         train_feat_scp = dataset_dir / "train" / "feats.scp"
         train_len_scp = dataset_dir / "train" / "len.scp"
         train_dataset_args = [

@@ -2,7 +2,7 @@ import os
 import argparse
 from sphfile import SPHFile
 from pathlib import Path
-from utils import create_output_dir
+from utils import create_output_dir_name
 from typing import Tuple
 
 

@@ -1,5 +1,5 @@
 import torch
-from utils import create_output_dir
+from utils import create_output_dir_name
 from preprocess_timit import process_timit
 from preprocess_librispeech import process_librispeech
 from pathlib import Path
@@ -14,7 +14,7 @@ import argparse
 def preprocess_data(args):
     data_sets = ("train", "dev", "test")
     # load data
-    dataset_directory = create_output_dir(
+    dataset_directory = create_output_dir_name(
         args.dataset, args.data_format, args.feat_type
     )
 
