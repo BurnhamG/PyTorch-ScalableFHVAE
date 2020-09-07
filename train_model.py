@@ -190,7 +190,9 @@ parser.add_argument(
     help="Log parameter values and gradients",
 )
 parser.add_argument(
-    "--continue-from", type=str, help="Checkpoint model for continuing training",
+    "--continue-from",
+    type=str,
+    help="Checkpoint model for continuing training",
 )
 parser.add_argument(
     "--finetune",
@@ -228,7 +230,10 @@ legacy_opts.add_argument(
     help="Number of training steps per epoch",
 )
 legacy_opts.add_argument(
-    "--log-interval", type=int, default=200, help="Step interval for printing info",
+    "--log-interval",
+    type=int,
+    default=200,
+    help="Step interval for printing info",
 )
 args = parser.parse_args()
 print(args)
@@ -340,7 +345,9 @@ else:
             args.rand_seg,
         ]
     else:
-        dataset_dir = create_output_dir_name(args.dataset, args.data_format, args.feat_type)
+        dataset_dir = create_output_dir_name(
+            args.dataset, args.data_format, args.feat_type
+        )
         train_feat_scp = dataset_dir / "train" / "feats.scp"
         train_len_scp = dataset_dir / "train" / "len.scp"
         train_dataset_args = [
@@ -423,7 +430,9 @@ if args.sample_hierarchical:
     hierarchical_loader = torch.utils.DataLoader(
         hierarchical_dataset, batch_size=1, shuffle=True, num_workers=4
     )
-    mu2_dict = estimate_mu2_dict(model, hierarchical_loader, args.num_hierarchical_sequences)
+    mu2_dict = estimate_mu2_dict(
+        model, hierarchical_loader, args.num_hierarchical_sequences
+    )
     mu2_table = torch.tensor([mu2_dict[idx] for idx in range(len(mu2_dict))])
 
 

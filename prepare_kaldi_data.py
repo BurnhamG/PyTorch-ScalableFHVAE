@@ -31,7 +31,7 @@ def prepare_kaldi(
     wav_scp_path = set_dir / "wav.scp"
 
     # count files
-    count = sum(1 for i in open(wav_scp_path, 'rb'))
+    count = sum(1 for i in open(wav_scp_path, "rb"))
 
     feat_ark, feat_scp, len_scp = file_paths
 
@@ -98,7 +98,10 @@ if __name__ == "__main__":
         help="Kaldi fbank configuration",
     )
     parser.add_argument(
-        "--kaldi_root", type=str, default="./kaldi", help="Kaldi root directory",
+        "--kaldi_root",
+        type=str,
+        default="./kaldi",
+        help="Kaldi root directory",
     )
     parser.add_argument(
         "--set_name",
@@ -126,5 +129,8 @@ if __name__ == "__main__":
         )
     else:
         prepare_kaldi(
-            args.dataset_dir, args.set_name, args.fbank_conf, args.kaldi_root,
+            args.dataset_dir,
+            args.set_name,
+            args.fbank_conf,
+            args.kaldi_root,
         )

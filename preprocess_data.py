@@ -111,7 +111,10 @@ if __name__ == "__main__":
         "--kaldi-root", type=str, default="./kaldi", help="Kaldi root directory"
     )
     parser.add_argument(
-        "--mels", type=int, default=80, help="Number of filter banks if choosing fbank",
+        "--mels",
+        type=int,
+        default=80,
+        help="Number of filter banks if choosing fbank",
     )
     parser.add_argument(
         "--sample-rate",
