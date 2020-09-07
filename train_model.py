@@ -423,7 +423,9 @@ if args.sample_hierarchical:
     hierarchical_loader = torch.utils.DataLoader(
         hierarchical_dataset, batch_size=1, shuffle=True, num_workers=4
     )
-    estimate_mu2_dict(model, hierarchical_loader, args.num_hierarchical_sequences)
+    mu2_dict = estimate_mu2_dict(model, hierarchical_loader, args.num_hierarchical_sequences)
+    mu2_table = torch.tensor([mu2_dict[idx] for idx in range(len(mu2_dict))])
+
 
 for epoch in range(start_epoch, args.epochs):
     # training

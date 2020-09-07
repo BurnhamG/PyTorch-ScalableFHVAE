@@ -53,3 +53,7 @@ else:
     checkpoint_file = sorted(Path(args.exp_dir).glob("*_*_e*.tar"))[args.step]
 
 model = load_checkpoint_file(checkpoint_file, True)[0]
+
+# TODO: Load datasets and create DataLoaders
+# TODO: Evaluate model on DataLoaders
+# TODO: Visualize model performance
