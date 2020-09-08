@@ -1,13 +1,13 @@
 import librosa
 from collections import defaultdict
 import numpy as np
-from nptyping import Array
+from nptyping import NDArray
 from pathlib import Path
 import torch
 from simple_fhvae import SimpleFHVAE
 from fhvae import FHVAE
 import shutil
-from typing import Optional
+from typing import Any, Optional
 import pickle
 
 
@@ -155,14 +155,14 @@ def save_checkpoint(
 class AudioUtils:
     @staticmethod
     def stft(
-        y: Array[float],
+        y: NDArray[float],
         sr: int,
         n_fft: int = 400,
         hop_t: float = 0.010,
         win_t: float = 0.025,
         window: str = "hamming",
         preemphasis: float = 0.97,
-    ) -> Array[float]:
+    ) -> NDArray[float]:
         """Short time Fourier Transform
 
         Args:
@@ -188,7 +188,7 @@ class AudioUtils:
 
     @staticmethod
     def rstft(
-        y: Array[float],
+        y: NDArray[float],
         sr: int,
         n_fft: int = 400,
         hop_t: float = 0.010,
@@ -197,7 +197,7 @@ class AudioUtils:
         preemphasis: float = 0.97,
         log: bool = True,
         log_floor: int = -50,
-    ) -> Array[float]:
+    ) -> NDArray[float]:
         """Computes (log) magnitude spectrogram
 
         Args:
@@ -224,7 +224,7 @@ class AudioUtils:
 
     @staticmethod
     def to_melspec(
-        y: Array[float, 1],
+        y: NDArray[(Any,), float],
         sr: int,
         n_fft: int = 400,
         hop_t: float = 0.010,
@@ -235,7 +235,7 @@ class AudioUtils:
         log: bool = True,
         norm_mel: str = "slaney",
         log_floor: int = -20,
-    ) -> Array[float]:
+    ) -> NDArray[float]:
         """Compute Mel-scale filter bank coefficients:
 
         Args:
@@ -273,12 +273,12 @@ class AudioUtils:
 
     @staticmethod
     def energy_vad(
-        y: Array[float],
+        y: NDArray[float],
         sr: int,
         hop_t: float = 0.010,
         win_t: float = 0.025,
         th_ratio: float = 1.04 / 2,
-    ) -> Array[bool]:
+    ) -> NDArray[bool]:
         """Compute energy-based VAD (Voice activity detection)
 
         Args:

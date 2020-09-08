@@ -6,19 +6,19 @@ import os
 import time
 import contextlib
 from multiprocessing import Pool
-from typing import Tuple, List
-from nptyping import Array
+from typing import Any, Tuple, List
+from nptyping import NDArray
 from pathlib import Path
 
 
 def generate_feat(
     ftype: str,
-    audio_data: Array[float],
+    audio_data: NDArray[(Any,), float],
     sample_rate: int,
     win_t: float,
     hop_t: float,
     n_mels: int,
-) -> Array[float]:
+) -> NDArray[(Any,), float]:
     """Generates the features for an audio sample
 
     Args:
