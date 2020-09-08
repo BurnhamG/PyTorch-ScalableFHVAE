@@ -435,7 +435,7 @@ if args.sample_hierarchical:
     )
     mu2_table = torch.tensor([mu2_dict[idx] for idx in range(len(mu2_dict))])
 
-
+model.double()
 for epoch in range(start_epoch, args.epochs):
     # training
     model.train()
@@ -461,7 +461,7 @@ for epoch in range(start_epoch, args.epochs):
             print(
                 f"====> Train Epoch: {epoch} [{current_pos}/{tot_len} ({percentage:.0f}%)]\tLoss: {cur_loss:.6f}"
             )
-        if np.isnan(lower_bound):
+        if torch.isnan(lower_bound).any():
             print("Training diverged")
             raise sys.exit(2)
         if args.legacy and batch_idx + 1 % args.steps_per_epoch == 0:
